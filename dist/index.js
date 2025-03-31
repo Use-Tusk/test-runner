@@ -55908,11 +55908,23 @@ async function processCommand({ command, runId, scripts, }) {
     // Use appDir if provided, otherwise use repo root
     const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
     const baseDir = data.appDir ? path.join(repoRoot, data.appDir) : repoRoot;
-    // Create full path for the script file (relative to appDir)
-    const fullFilePath = path.join(baseDir, data.filePath);
-    const fullOriginalFilePath = data.originalFilePath
-        ? path.join(baseDir, data.originalFilePath)
+    coreExports.info(`Repo root: ${repoRoot}`);
+    coreExports.info(`App directory: ${data.appDir}`);
+    coreExports.info(`Base directory: ${baseDir}`);
+    // Check if data.filePath already starts with appDir to avoid duplication
+    const filePath = data.appDir && data.filePath.startsWith(data.appDir)
+        ? data.filePath.substring(data.appDir.length + 1)
+        : data.filePath;
+    const originalFilePath = data.originalFilePath && data.appDir && data.originalFilePath.startsWith(data.appDir)
+        ? data.originalFilePath.substring(data.appDir.length + 1)
         : data.originalFilePath;
+    coreExports.info(`File path: ${filePath}`);
+    coreExports.info(`Original file path: ${originalFilePath}`);
+    // Create full path for the script file
+    const fullFilePath = path.join(baseDir, filePath);
+    const fullOriginalFilePath = originalFilePath
+        ? path.join(baseDir, originalFilePath)
+        : originalFilePath;
     coreExports.info(`Full file path: ${fullFilePath}`);
     coreExports.info(`Full original file path: ${fullOriginalFilePath}`);
     // Ensure directory exists
@@ -55935,8 +55947,9 @@ async function processCommand({ command, runId, scripts, }) {
     if (scripts.lint && actions.includes(FileAction.LINT)) {
         coreExports.info("Linting file");
         const lintTemplate = Handlebars.compile(scripts.lint);
+        const relativeFilePath = path.relative(baseDir, fullFilePath);
         const processedLintScript = lintTemplate({
-            file: fullFilePath,
+            file: relativeFilePath,
         });
         try {
             const result = await executeScript(processedLintScript, baseDir, "Lint");
