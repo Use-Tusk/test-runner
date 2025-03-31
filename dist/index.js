@@ -55906,11 +55906,11 @@ async function processCommand({ command, runId, scripts, }) {
     await ackCommand({ runId, commandId: command.id });
     // Write the file first
     // Use appDir if provided, otherwise use repo root
-    const baseDir = data.appDir || process.env.GITHUB_WORKSPACE || process.cwd();
+    const baseDir = data.appDir ? path.join(process.cwd(), data.appDir) : process.cwd();
     // Create full path for the script file (relative to appDir)
-    const fullFilePath = path.relative(baseDir, data.filePath);
+    const fullFilePath = path.join(baseDir, data.filePath);
     const fullOriginalFilePath = data.originalFilePath
-        ? path.relative(baseDir, data.originalFilePath)
+        ? path.join(baseDir, data.originalFilePath)
         : data.originalFilePath;
     coreExports.info(`Full file path: ${fullFilePath}`);
     coreExports.info(`Full original file path: ${fullOriginalFilePath}`);
@@ -55995,7 +55995,9 @@ async function processCommand({ command, runId, scripts, }) {
             lastCommandExitCode = 1;
             return;
         }
-        const relativeFilePaths = writtenFilePaths.map((filePath) => baseDir ? path.relative(baseDir, filePath) : filePath);
+        const relativeFilePaths = writtenFilePaths.map((filePath) => {
+            return path.isAbsolute(filePath) ? path.relative(baseDir, filePath) : filePath;
+        });
         const testFilePaths = relativeFilePaths.join(" ");
         const coverageTemplate = Handlebars.compile(scripts.coverage);
         const processedCoverageScript = coverageTemplate({
