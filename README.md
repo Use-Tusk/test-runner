@@ -14,9 +14,9 @@ This GitHub Action facilitates running Tusk-generated tests on Github runners.
 
 Log in to [Tusk](https://app.usetusk.ai/app) and auth your GitHub repo.
 
-When you push new commits, Tusk runs against your commit changes and generates tests. To ensure that test scenarios are meaningful and verified, Tusk will start this workflow and provision a runner (with a unique `runId`), using it as an ephemeral sandbox, to run tests against your specific setup and dependencies. Essentially, this action polls for live commands emitted by Tusk based on the progress of the run, executes them, and sends the results back to Tusk for further processing.
+When you push new commits, Tusk runs against your commit changes and generates tests. To ensure that test scenarios are meaningful and verified, Tusk will start this workflow and provision a runner (with a unique `runId`), using it as an ephemeral sandbox to run tests against your specific setup and dependencies. Essentially, this action polls for live commands emitted by Tusk based on the progress of the run, executes them, and sends the results back to Tusk for further processing.
 
-Add the following workflow to your `.github/workflows` folder and adapt inputs accordingly. If your repo requires additional setup steps, add them before the `Start runner` step.
+Add the following workflow to your `.github/workflows` folder and adapt inputs accordingly. If your repo requires additional setup steps, add them before the `Start runner` step. If your repo is a monorepo with multiple services, each workflow corresponds to a service sub-directory when you set up Tusk.
 
 ```yml
 name: Tusk Test Runner
@@ -56,10 +56,44 @@ jobs:
           authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
           lintScript: "black {{file}}"
           testScript: "pytest {{file}}"
+          coverageScript: |
+            coverage run -m pytest {{testFilePaths}}
+            coverage json -o coverage.json
 ```
 
-In your lint and test scripts, use `{{file}}` as a placeholder for where a specific file path will be inserted. This will be replaced by actual paths for test files that Tusk is working on at runtime.
+The test runner step takes as input these parameters:
+
+- `runId`
+  - From workflow dispatch
+- `tuskUrl`
+  - From workflow dispatch
+- `commitSha`
+  - From workflow dispatch
+- `authToken`
+  - Your Tusk API key
+  - In the above example, this is stored as a GitHub repo secret
+- `lintScript`
+  - Command to execute to lint (fix) a file
+  - Optional
+- `testScript`
+  - Command to execute to run tests in a file
+- `coverageScript`
+  - Command to execute to obtain coverage gain based on newly generated test files
+  - Optional
+
+In your lint and test scripts, use `{{file}}` as a placeholder for where a specific file path will be inserted. If you provide a coverage script, use `{{testFilePaths}}` as a placeholder for where generated test file paths will be inserted. These will be replaced by actual paths for test files that Tusk is working on at runtime.
+
+For calculating test coverage gains, we support Pytest and Jest at the moment.
+
+- For Pytest, your coverage script should write coverage data into `coverage.json` (the default file for Pytest). In the above example, we assume the `coverage` package is installed as part of the project requirements.
+- For Jest, your coverage script should write coverage data into `coverage-summary.json` (the default file for Jest).
+
+  Example:
+
+  ```
+  npm run test {{testFilePaths}} -- --coverage --coverageReporters=json-summary
+  ```
 
 ## Contact
 
-Need help? Drop us an email at founders@usetusk.ai.
+Need help? Drop us an email at support@usetusk.ai.

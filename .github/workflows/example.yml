@@ -35,3 +35,6 @@ jobs:
           authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
           lintScript: "black {{file}}"
           testScript: "pytest {{file}}"
+          coverageScript: |
+            coverage run -m pytest {{testFilePaths}}
+            coverage json -o coverage.json
