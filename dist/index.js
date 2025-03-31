@@ -55970,8 +55970,9 @@ async function processCommand({ command, runId, scripts, }) {
     if (actions.includes(FileAction.TEST)) {
         coreExports.info("Testing file");
         const testTemplate = Handlebars.compile(scripts.test);
+        const relativeFilePath = path.relative(baseDir, fullFilePath);
         const processedTestScript = testTemplate({
-            file: fullFilePath,
+            file: relativeFilePath,
         });
         try {
             const result = await executeScript(processedTestScript, baseDir, "Test");

@@ -94,8 +94,9 @@ export async function processCommand({
   if (actions.includes(FileAction.TEST)) {
     core.info("Testing file");
     const testTemplate = Handlebars.compile(scripts.test);
+    const relativeFilePath = path.relative(baseDir, fullFilePath);
     const processedTestScript = testTemplate({
-      file: fullFilePath,
+      file: relativeFilePath,
     });
 
     try {
