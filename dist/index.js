@@ -55906,7 +55906,8 @@ async function processCommand({ command, runId, scripts, }) {
     await ackCommand({ runId, commandId: command.id });
     // Write the file first
     // Use appDir if provided, otherwise use repo root
-    const baseDir = data.appDir ? path.join(process.cwd(), data.appDir) : process.cwd();
+    const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+    const baseDir = data.appDir ? path.join(repoRoot, data.appDir) : repoRoot;
     // Create full path for the script file (relative to appDir)
     const fullFilePath = path.join(baseDir, data.filePath);
     const fullOriginalFilePath = data.originalFilePath
