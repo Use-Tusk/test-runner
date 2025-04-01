@@ -86,6 +86,10 @@ export async function processCommand({
     error: result.exitCode !== 0 ? result.stderr : undefined,
   };
 
+  core.info(`[result]
+${JSON.stringify(commandResult)}
+`);
+
   await sendCommandResult({ runId, result: commandResult });
 }
 
@@ -93,25 +97,25 @@ function setupPaths(data: FileCommand["data"]): AbsolutePathData {
   const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
   const baseDir = data.appDir ? path.join(repoRoot, data.appDir) : repoRoot;
 
-  core.info(`Repo root: ${repoRoot}`);
-  core.info(`App directory: ${data.appDir}`);
-  core.info(`Base directory: ${baseDir}`);
-
   // Normalize file paths to avoid duplication with appDir
   const filePath = normalizeFilePath({ filePath: data.filePath, appDir: data.appDir });
   const originalFilePath = data.originalFilePath
     ? normalizeFilePath({ filePath: data.originalFilePath, appDir: data.appDir })
     : undefined;
 
-  core.info(`File path: ${filePath}`);
-  core.info(`Original file path: ${originalFilePath}`);
-
   // Create full paths
   const fullFilePath = path.join(baseDir, filePath);
   const fullOriginalFilePath = originalFilePath ? path.join(baseDir, originalFilePath) : undefined;
 
-  core.info(`Full file path: ${fullFilePath}`);
-  core.info(`Full original file path: ${fullOriginalFilePath}`);
+  core.info(`[paths]
+repoRoot: ${repoRoot}
+appDir: ${data.appDir}
+baseDir: ${baseDir}
+filePath: ${filePath}
+originalFilePath: ${originalFilePath}
+fullFilePath: ${fullFilePath}
+fullOriginalFilePath: ${fullOriginalFilePath}
+`);
 
   return { baseDir, filePath: fullFilePath, originalFilePath: fullOriginalFilePath };
 }
@@ -130,14 +134,14 @@ async function handleWriteAction({
   fullFilePath: string;
   data: FileCommand["data"];
 }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  core.info("Writing file");
-
   if (!data.fileContents) {
     throw new Error("File contents are required for write action");
   }
 
   await fs.writeFile(fullFilePath, data.fileContents, { encoding: "utf8" });
-  core.info(`File written to ${fullFilePath}`);
+  core.info(`[write]
+File written to ${fullFilePath}
+`);
 
   return { stdout: "", stderr: "", exitCode: 0 };
 }
@@ -147,9 +151,12 @@ async function handleReadAction({
 }: {
   fullFilePath: string;
 }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  core.info("Reading file");
   const fileContents = await fs.readFile(fullFilePath, { encoding: "utf8" });
-  core.info(`File read successfully`);
+  core.info(`[read]
+File: ${fullFilePath}
+Contents;
+${fileContents}
+`);
   return { stdout: fileContents, stderr: "", exitCode: 0 };
 }
 
@@ -162,7 +169,9 @@ async function handleLintAction({
   baseDir: string;
   fullFilePath: string;
 }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  core.info("Linting file");
+  core.info(`[lint]
+File: ${fullFilePath}
+`);
   const lintTemplate = Handlebars.compile(lintScript);
   const relativeFilePath = path.relative(baseDir, fullFilePath);
   const processedLintScript = lintTemplate({
@@ -189,8 +198,6 @@ async function handleTestAction({
   fullOriginalFilePath: string | undefined;
   data: FileCommand["data"];
 }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  core.info("Testing file");
-
   // Get relative paths for test command
   let testFilePath = path.relative(baseDir, fullFilePath);
   let origFilePath = fullOriginalFilePath
@@ -214,11 +221,19 @@ async function handleTestAction({
     originalFile: origFilePath,
   });
 
-  return await executeScript({
+  const result = await executeScript({
     script: processedTestScript,
     cwd: baseDir,
     commandType: "Test",
   });
+
+  core.info(`[test]
+File: ${fullFilePath}
+Result:
+${result.stdout}
+`);
+
+  return result;
 }
 
 async function handleCoverageAction({
@@ -230,7 +245,10 @@ async function handleCoverageAction({
   baseDir: string;
   data: FileCommand["data"];
 }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  core.info("Generating coverage report");
+  core.info(`[coverage]
+script:
+${coverageScript}
+`);
 
   const writtenFilePaths = data.testFilePaths;
   if (!writtenFilePaths) {

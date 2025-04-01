@@ -55953,26 +55953,31 @@ async function processCommand({ command, runId, scripts, }) {
         exitCode: result.exitCode,
         error: result.exitCode !== 0 ? result.stderr : undefined,
     };
+    coreExports.info(`[result]
+${JSON.stringify(commandResult)}
+`);
     await sendCommandResult({ runId, result: commandResult });
 }
 function setupPaths(data) {
     const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
     const baseDir = data.appDir ? path.join(repoRoot, data.appDir) : repoRoot;
-    coreExports.info(`Repo root: ${repoRoot}`);
-    coreExports.info(`App directory: ${data.appDir}`);
-    coreExports.info(`Base directory: ${baseDir}`);
     // Normalize file paths to avoid duplication with appDir
     const filePath = normalizeFilePath({ filePath: data.filePath, appDir: data.appDir });
     const originalFilePath = data.originalFilePath
         ? normalizeFilePath({ filePath: data.originalFilePath, appDir: data.appDir })
         : undefined;
-    coreExports.info(`File path: ${filePath}`);
-    coreExports.info(`Original file path: ${originalFilePath}`);
     // Create full paths
     const fullFilePath = path.join(baseDir, filePath);
     const fullOriginalFilePath = originalFilePath ? path.join(baseDir, originalFilePath) : undefined;
-    coreExports.info(`Full file path: ${fullFilePath}`);
-    coreExports.info(`Full original file path: ${fullOriginalFilePath}`);
+    coreExports.info(`[paths]
+repoRoot: ${repoRoot}
+appDir: ${data.appDir}
+baseDir: ${baseDir}
+filePath: ${filePath}
+originalFilePath: ${originalFilePath}
+fullFilePath: ${fullFilePath}
+fullOriginalFilePath: ${fullOriginalFilePath}
+`);
     return { baseDir, filePath: fullFilePath, originalFilePath: fullOriginalFilePath };
 }
 function normalizeFilePath({ filePath, appDir }) {
@@ -55982,22 +55987,28 @@ function normalizeFilePath({ filePath, appDir }) {
     return filePath;
 }
 async function handleWriteAction({ fullFilePath, data, }) {
-    coreExports.info("Writing file");
     if (!data.fileContents) {
         throw new Error("File contents are required for write action");
     }
     await fs.writeFile(fullFilePath, data.fileContents, { encoding: "utf8" });
-    coreExports.info(`File written to ${fullFilePath}`);
+    coreExports.info(`[write]
+File written to ${fullFilePath}
+`);
     return { stdout: "", stderr: "", exitCode: 0 };
 }
 async function handleReadAction({ fullFilePath, }) {
-    coreExports.info("Reading file");
     const fileContents = await fs.readFile(fullFilePath, { encoding: "utf8" });
-    coreExports.info(`File read successfully`);
+    coreExports.info(`[read]
+File: ${fullFilePath}
+Contents;
+${fileContents}
+`);
     return { stdout: fileContents, stderr: "", exitCode: 0 };
 }
 async function handleLintAction({ lintScript, baseDir, fullFilePath, }) {
-    coreExports.info("Linting file");
+    coreExports.info(`[lint]
+File: ${fullFilePath}
+`);
     const lintTemplate = Handlebars.compile(lintScript);
     const relativeFilePath = path.relative(baseDir, fullFilePath);
     const processedLintScript = lintTemplate({
@@ -56010,7 +56021,6 @@ async function handleLintAction({ lintScript, baseDir, fullFilePath, }) {
     });
 }
 async function handleTestAction({ testScript, baseDir, fullFilePath, fullOriginalFilePath, data, }) {
-    coreExports.info("Testing file");
     // Get relative paths for test command
     let testFilePath = path.relative(baseDir, fullFilePath);
     let origFilePath = fullOriginalFilePath
@@ -56030,14 +56040,23 @@ async function handleTestAction({ testScript, baseDir, fullFilePath, fullOrigina
         file: testFilePath,
         originalFile: origFilePath,
     });
-    return await executeScript({
+    const result = await executeScript({
         script: processedTestScript,
         cwd: baseDir,
         commandType: "Test",
     });
+    coreExports.info(`[test]
+File: ${fullFilePath}
+Result:
+${result.stdout}
+`);
+    return result;
 }
 async function handleCoverageAction({ coverageScript, baseDir, data, }) {
-    coreExports.info("Generating coverage report");
+    coreExports.info(`[coverage]
+script:
+${coverageScript}
+`);
     const writtenFilePaths = data.testFilePaths;
     if (!writtenFilePaths) {
         throw new Error("Test file paths are required for coverage action");
