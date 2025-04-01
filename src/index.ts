@@ -112,6 +112,8 @@ async function run() {
     }
 
     core.info("Long-polling completed successfully");
+
+    process.exit(0);
   } catch (error) {
     core.setFailed(`Action failed`);
     core.error(`Server response body: ${JSON.stringify(error)}`);

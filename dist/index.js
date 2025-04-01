@@ -55845,7 +55845,7 @@ async function withRetry(requestFn, maxRetries = 3) {
             if (axios.isAxiosError(error) && error.response?.status === 503) {
                 if (attempt < maxRetries) {
                     const delayMs = 2 ** attempt * 1000; // Exponential backoff: 1s, 2s, 4s
-                    coreExports.info(`Received 503 error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+                    coreExports.info(`[pollCommands][${new Date().toISOString()}] Received 503 error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
                     await new Promise((resolve) => setTimeout(resolve, delayMs));
                     continue;
                 }
@@ -55880,10 +55880,10 @@ const ackCommand = async ({ runId, commandId, }) => {
             signal: AbortSignal.timeout(5_000),
         });
         if (response.status === 200) {
-            coreExports.info(`[ackCommand] Successfully acked command ${commandId}`);
+            coreExports.info(`[ackCommand][${new Date().toISOString()}] Successfully acked command ${commandId}`);
         }
         else {
-            coreExports.warning(`[ackCommand] Failed to ack command ${commandId}, server is probably not running`);
+            coreExports.warning(`[ackCommand][${new Date().toISOString()}] Failed to ack command ${commandId}, server is probably not running`);
         }
         return response.data;
     });
@@ -55899,10 +55899,10 @@ const sendCommandResult = async ({ runId, result, }) => {
             signal: AbortSignal.timeout(5_000),
         });
         if (response.status === 200) {
-            coreExports.info(`[sendCommandResult] Successfully sent result for command ${result.commandId}`);
+            coreExports.info(`[sendCommandResult][${new Date().toISOString()}] Successfully sent result for command ${result.commandId}`);
         }
         else {
-            coreExports.warning(`[sendCommandResult] Failed to send result for command ${result.commandId}, server is probably not running`);
+            coreExports.warning(`[sendCommandResult][${new Date().toISOString()}] Failed to send result for command ${result.commandId}, server is probably not running. Server response: ${response.data}`);
         }
     });
 };
@@ -56184,6 +56184,7 @@ async function run() {
             await new Promise((resolve) => setTimeout(resolve, pollingInterval * 1000));
         }
         coreExports.info("Long-polling completed successfully");
+        process.exit(0);
     }
     catch (error) {
         coreExports.setFailed(`Action failed`);

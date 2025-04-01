@@ -25,7 +25,7 @@ async function withRetry<T>(requestFn: () => Promise<T>, maxRetries = 3): Promis
         if (attempt < maxRetries) {
           const delayMs = 2 ** attempt * 1000; // Exponential backoff: 1s, 2s, 4s
           core.info(
-            `Received 503 error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
+            `[pollCommands][${new Date().toISOString()}] Received 503 error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
           );
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
@@ -83,10 +83,12 @@ export const ackCommand = async ({
     );
 
     if (response.status === 200) {
-      core.info(`[ackCommand] Successfully acked command ${commandId}`);
+      core.info(
+        `[ackCommand][${new Date().toISOString()}] Successfully acked command ${commandId}`,
+      );
     } else {
       core.warning(
-        `[ackCommand] Failed to ack command ${commandId}, server is probably not running`,
+        `[ackCommand][${new Date().toISOString()}] Failed to ack command ${commandId}, server is probably not running`,
       );
     }
 
@@ -116,10 +118,12 @@ export const sendCommandResult = async ({
     );
 
     if (response.status === 200) {
-      core.info(`[sendCommandResult] Successfully sent result for command ${result.commandId}`);
+      core.info(
+        `[sendCommandResult][${new Date().toISOString()}] Successfully sent result for command ${result.commandId}`,
+      );
     } else {
       core.warning(
-        `[sendCommandResult] Failed to send result for command ${result.commandId}, server is probably not running`,
+        `[sendCommandResult][${new Date().toISOString()}] Failed to send result for command ${result.commandId}, server is probably not running. Server response: ${response.data}`,
       );
     }
   });
