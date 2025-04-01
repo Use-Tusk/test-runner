@@ -55879,8 +55879,11 @@ const ackCommand = async ({ runId, commandId, }) => {
             timeout: timeoutMs,
             signal: AbortSignal.timeout(5_000),
         });
-        if (response.status !== 200) {
-            coreExports.warning(`Failed to ack command ${commandId}, server is probably not running`);
+        if (response.status === 200) {
+            coreExports.info(`[ackCommand] Successfully acked command ${commandId}`);
+        }
+        else {
+            coreExports.warning(`[ackCommand] Failed to ack command ${commandId}, server is probably not running`);
         }
         return response.data;
     });
@@ -55895,8 +55898,11 @@ const sendCommandResult = async ({ runId, result, }) => {
             timeout: timeoutMs,
             signal: AbortSignal.timeout(5_000),
         });
-        if (response.status !== 200) {
-            coreExports.warning(`Failed to send result for command ${result.commandId}, server is probably not running`);
+        if (response.status === 200) {
+            coreExports.info(`[sendCommandResult] Successfully sent result for command ${result.commandId}`);
+        }
+        else {
+            coreExports.warning(`[sendCommandResult] Failed to send result for command ${result.commandId}, server is probably not running`);
         }
     });
 };
@@ -55953,8 +55959,9 @@ async function processCommand({ command, runId, scripts, }) {
         exitCode: result.exitCode,
         error: result.exitCode !== 0 ? result.stderr : undefined,
     };
-    coreExports.info(`[result]
-${JSON.stringify(commandResult)}
+    coreExports.info(`
+[result]
+${JSON.stringify(commandResult, null, 2)}
 `);
     await sendCommandResult({ runId, result: commandResult });
 }
@@ -55969,7 +55976,8 @@ function setupPaths(data) {
     // Create full paths
     const fullFilePath = path.join(baseDir, filePath);
     const fullOriginalFilePath = originalFilePath ? path.join(baseDir, originalFilePath) : undefined;
-    coreExports.info(`[paths]
+    coreExports.info(`
+[paths]
 repoRoot: ${repoRoot}
 appDir: ${data.appDir}
 baseDir: ${baseDir}
@@ -55991,14 +55999,16 @@ async function handleWriteAction({ fullFilePath, data, }) {
         throw new Error("File contents are required for write action");
     }
     await fs.writeFile(fullFilePath, data.fileContents, { encoding: "utf8" });
-    coreExports.info(`[write]
+    coreExports.info(`
+[write]
 File written to ${fullFilePath}
 `);
     return { stdout: "", stderr: "", exitCode: 0 };
 }
 async function handleReadAction({ fullFilePath, }) {
     const fileContents = await fs.readFile(fullFilePath, { encoding: "utf8" });
-    coreExports.info(`[read]
+    coreExports.info(`
+[read]
 File: ${fullFilePath}
 Contents;
 ${fileContents}
@@ -56006,7 +56016,8 @@ ${fileContents}
     return { stdout: fileContents, stderr: "", exitCode: 0 };
 }
 async function handleLintAction({ lintScript, baseDir, fullFilePath, }) {
-    coreExports.info(`[lint]
+    coreExports.info(`
+[lint]
 File: ${fullFilePath}
 `);
     const lintTemplate = Handlebars.compile(lintScript);
@@ -56045,7 +56056,8 @@ async function handleTestAction({ testScript, baseDir, fullFilePath, fullOrigina
         cwd: baseDir,
         commandType: "Test",
     });
-    coreExports.info(`[test]
+    coreExports.info(`
+[test]
 File: ${fullFilePath}
 Result:
 ${result.stdout}
@@ -56053,7 +56065,8 @@ ${result.stdout}
     return result;
 }
 async function handleCoverageAction({ coverageScript, baseDir, data, }) {
-    coreExports.info(`[coverage]
+    coreExports.info(`
+[coverage]
 script:
 ${coverageScript}
 `);

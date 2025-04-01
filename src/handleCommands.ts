@@ -86,8 +86,9 @@ export async function processCommand({
     error: result.exitCode !== 0 ? result.stderr : undefined,
   };
 
-  core.info(`[result]
-${JSON.stringify(commandResult)}
+  core.info(`
+[result]
+${JSON.stringify(commandResult, null, 2)}
 `);
 
   await sendCommandResult({ runId, result: commandResult });
@@ -107,7 +108,8 @@ function setupPaths(data: FileCommand["data"]): AbsolutePathData {
   const fullFilePath = path.join(baseDir, filePath);
   const fullOriginalFilePath = originalFilePath ? path.join(baseDir, originalFilePath) : undefined;
 
-  core.info(`[paths]
+  core.info(`
+[paths]
 repoRoot: ${repoRoot}
 appDir: ${data.appDir}
 baseDir: ${baseDir}
@@ -139,7 +141,8 @@ async function handleWriteAction({
   }
 
   await fs.writeFile(fullFilePath, data.fileContents, { encoding: "utf8" });
-  core.info(`[write]
+  core.info(`
+[write]
 File written to ${fullFilePath}
 `);
 
@@ -152,7 +155,8 @@ async function handleReadAction({
   fullFilePath: string;
 }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const fileContents = await fs.readFile(fullFilePath, { encoding: "utf8" });
-  core.info(`[read]
+  core.info(`
+[read]
 File: ${fullFilePath}
 Contents;
 ${fileContents}
@@ -169,7 +173,8 @@ async function handleLintAction({
   baseDir: string;
   fullFilePath: string;
 }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  core.info(`[lint]
+  core.info(`
+[lint]
 File: ${fullFilePath}
 `);
   const lintTemplate = Handlebars.compile(lintScript);
@@ -227,7 +232,8 @@ async function handleTestAction({
     commandType: "Test",
   });
 
-  core.info(`[test]
+  core.info(`
+[test]
 File: ${fullFilePath}
 Result:
 ${result.stdout}
@@ -245,7 +251,8 @@ async function handleCoverageAction({
   baseDir: string;
   data: FileCommand["data"];
 }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  core.info(`[coverage]
+  core.info(`
+[coverage]
 script:
 ${coverageScript}
 `);

@@ -82,8 +82,12 @@ export const ackCommand = async ({
       },
     );
 
-    if (response.status !== 200) {
-      core.warning(`Failed to ack command ${commandId}, server is probably not running`);
+    if (response.status === 200) {
+      core.info(`[ackCommand] Successfully acked command ${commandId}`);
+    } else {
+      core.warning(
+        `[ackCommand] Failed to ack command ${commandId}, server is probably not running`,
+      );
     }
 
     return response.data as Command;
@@ -111,9 +115,11 @@ export const sendCommandResult = async ({
       },
     );
 
-    if (response.status !== 200) {
+    if (response.status === 200) {
+      core.info(`[sendCommandResult] Successfully sent result for command ${result.commandId}`);
+    } else {
       core.warning(
-        `Failed to send result for command ${result.commandId}, server is probably not running`,
+        `[sendCommandResult] Failed to send result for command ${result.commandId}, server is probably not running`,
       );
     }
   });
