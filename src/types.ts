@@ -54,8 +54,14 @@ export interface RunnerCommandResult {
 
 export type CommandResult = FileCommandResult | RunnerCommandResult;
 
-export interface Scripts {
+export interface ScriptData {
   test: string;
   lint?: string;
   coverage?: string;
+}
+
+export interface AbsolutePathData {
+  baseDir: string;
+  filePath: string;
+  originalFilePath?: string; // Only used in Go tests
 }

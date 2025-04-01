@@ -55904,146 +55904,158 @@ const sendCommandResult = async ({ runId, result, }) => {
 async function processCommand({ command, runId, scripts, }) {
     const { data, actions } = command;
     await ackCommand({ runId, commandId: command.id });
-    // Write the file first
-    // Use appDir if provided, otherwise use repo root
-    const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
-    const baseDir = data.appDir ? path.join(repoRoot, data.appDir) : repoRoot;
-    coreExports.info(`Repo root: ${repoRoot}`);
-    coreExports.info(`App directory: ${data.appDir}`);
-    coreExports.info(`Base directory: ${baseDir}`);
-    // Check if data.filePath already starts with appDir to avoid duplication
-    const filePath = data.appDir && data.filePath.startsWith(data.appDir)
-        ? data.filePath.substring(data.appDir.length + 1)
-        : data.filePath;
-    const originalFilePath = data.originalFilePath && data.appDir && data.originalFilePath.startsWith(data.appDir)
-        ? data.originalFilePath.substring(data.appDir.length + 1)
-        : data.originalFilePath;
-    coreExports.info(`File path: ${filePath}`);
-    coreExports.info(`Original file path: ${originalFilePath}`);
-    // Create full path for the script file
-    const fullFilePath = path.join(baseDir, filePath);
-    const fullOriginalFilePath = originalFilePath
-        ? path.join(baseDir, originalFilePath)
-        : originalFilePath;
-    coreExports.info(`Full file path: ${fullFilePath}`);
-    coreExports.info(`Full original file path: ${fullOriginalFilePath}`);
+    // Setup paths
+    const { baseDir, filePath: fullFilePath, originalFilePath: fullOriginalFilePath, } = setupPaths(data);
     // Ensure directory exists
     await fs.mkdir(path.dirname(fullFilePath), { recursive: true });
-    let lastCommandStdout = "";
-    let lastCommandStderr = "";
-    let lastCommandExitCode = 0;
-    if (actions.includes(FileAction.WRITE)) {
-        coreExports.info("Writing file");
-        if (!data.fileContents) {
-            coreExports.error("File contents are required for write action");
-            lastCommandStdout = "";
-            lastCommandStderr = "File contents are required for write action";
-            lastCommandExitCode = 1;
-            return;
+    let result = { stdout: "", stderr: "", exitCode: 0 };
+    try {
+        // Process each action in sequence
+        if (actions.includes(FileAction.WRITE)) {
+            result = await handleWriteAction({ fullFilePath, data });
         }
-        await fs.writeFile(fullFilePath, data.fileContents, { encoding: "utf8" });
-        coreExports.info(`File written to ${fullFilePath}`);
-    }
-    if (scripts.lint && actions.includes(FileAction.LINT)) {
-        coreExports.info("Linting file");
-        const lintTemplate = Handlebars.compile(scripts.lint);
-        const relativeFilePath = path.relative(baseDir, fullFilePath);
-        const processedLintScript = lintTemplate({
-            file: relativeFilePath,
-        });
-        try {
-            const result = await executeScript(processedLintScript, baseDir, "Lint");
-            lastCommandStdout = result.stdout;
-            lastCommandStderr = result.stderr;
-            lastCommandExitCode = result.exitCode;
+        if (scripts.lint && actions.includes(FileAction.LINT)) {
+            result = await handleLintAction({ lintScript: scripts.lint, baseDir, fullFilePath });
         }
-        catch (err) {
-            coreExports.error(`Failed to execute lint command: ${err}`);
-            lastCommandStdout = "";
-            lastCommandStderr = String(err);
-            lastCommandExitCode = 1;
+        if (actions.includes(FileAction.READ)) {
+            result = await handleReadAction({ fullFilePath });
+        }
+        if (actions.includes(FileAction.TEST)) {
+            result = await handleTestAction({
+                testScript: scripts.test,
+                baseDir,
+                fullFilePath,
+                fullOriginalFilePath,
+                data,
+            });
+        }
+        if (scripts.coverage && actions.includes(FileAction.COVERAGE)) {
+            result = await handleCoverageAction({
+                coverageScript: scripts.coverage,
+                baseDir,
+                data,
+            });
         }
     }
-    if (actions.includes(FileAction.READ)) {
-        try {
-            coreExports.info("Reading file");
-            const fileContents = await fs.readFile(fullFilePath, { encoding: "utf8" });
-            coreExports.info(`File contents: ${fileContents}`);
-            lastCommandStdout = fileContents;
-            lastCommandStderr = "";
-            lastCommandExitCode = 0;
-        }
-        catch (err) {
-            coreExports.error(`Failed to read file: ${err}`);
-            lastCommandStdout = "";
-            lastCommandStderr = String(err);
-            lastCommandExitCode = 1;
-        }
-    }
-    if (actions.includes(FileAction.TEST)) {
-        coreExports.info("Testing file");
-        const testTemplate = Handlebars.compile(scripts.test);
-        const relativeFilePath = path.relative(baseDir, fullFilePath);
-        const processedTestScript = testTemplate({
-            file: relativeFilePath,
-        });
-        try {
-            const result = await executeScript(processedTestScript, baseDir, "Test");
-            lastCommandStdout = result.stdout;
-            lastCommandStderr = result.stderr;
-            lastCommandExitCode = result.exitCode;
-        }
-        catch (err) {
-            coreExports.error(`Failed to execute test command: ${err}`);
-            lastCommandStdout = "";
-            lastCommandStderr = String(err);
-            lastCommandExitCode = 1;
-        }
-    }
-    if (scripts.coverage && actions.includes(FileAction.COVERAGE)) {
-        coreExports.info("Generating coverage report");
-        const writtenFilePaths = command.data.testFilePaths;
-        if (!writtenFilePaths) {
-            coreExports.error("Test file paths are required for coverage action");
-            lastCommandStdout = "";
-            lastCommandStderr = "Test file paths are required for coverage action";
-            lastCommandExitCode = 1;
-            return;
-        }
-        const relativeFilePaths = writtenFilePaths.map((filePath) => {
-            return path.isAbsolute(filePath) ? path.relative(baseDir, filePath) : filePath;
-        });
-        const testFilePaths = relativeFilePaths.join(" ");
-        const coverageTemplate = Handlebars.compile(scripts.coverage);
-        const processedCoverageScript = coverageTemplate({
-            testFilePaths,
-        });
-        try {
-            const result = await executeScript(processedCoverageScript, baseDir, "Coverage");
-            lastCommandStdout = result.stdout;
-            lastCommandStderr = result.stderr;
-            lastCommandExitCode = result.exitCode;
-        }
-        catch (err) {
-            coreExports.error(`Failed to execute coverage command: ${err}`);
-            lastCommandStdout = "";
-            lastCommandStderr = String(err);
-            lastCommandExitCode = 1;
-        }
+    catch (error) {
+        result = {
+            stdout: "",
+            stderr: error instanceof Error ? error.message : String(error),
+            exitCode: 1,
+        };
     }
     const commandResult = {
         commandId: command.id,
         type: "file",
         completedAt: new Date(),
-        stdout: lastCommandStdout,
-        stderr: lastCommandStderr,
-        exitCode: lastCommandExitCode,
-        error: lastCommandExitCode !== 0 ? lastCommandStderr : undefined,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+        error: result.exitCode !== 0 ? result.stderr : undefined,
     };
     await sendCommandResult({ runId, result: commandResult });
 }
-async function executeScript(script, cwd, commandType) {
-    coreExports.info(`Executing ${commandType.toLowerCase()} script: ${script}`);
+function setupPaths(data) {
+    const repoRoot = process.env.GITHUB_WORKSPACE || process.cwd();
+    const baseDir = data.appDir ? path.join(repoRoot, data.appDir) : repoRoot;
+    coreExports.info(`Repo root: ${repoRoot}`);
+    coreExports.info(`App directory: ${data.appDir}`);
+    coreExports.info(`Base directory: ${baseDir}`);
+    // Normalize file paths to avoid duplication with appDir
+    const filePath = normalizeFilePath({ filePath: data.filePath, appDir: data.appDir });
+    const originalFilePath = data.originalFilePath
+        ? normalizeFilePath({ filePath: data.originalFilePath, appDir: data.appDir })
+        : undefined;
+    coreExports.info(`File path: ${filePath}`);
+    coreExports.info(`Original file path: ${originalFilePath}`);
+    // Create full paths
+    const fullFilePath = path.join(baseDir, filePath);
+    const fullOriginalFilePath = originalFilePath ? path.join(baseDir, originalFilePath) : undefined;
+    coreExports.info(`Full file path: ${fullFilePath}`);
+    coreExports.info(`Full original file path: ${fullOriginalFilePath}`);
+    return { baseDir, filePath: fullFilePath, originalFilePath: fullOriginalFilePath };
+}
+function normalizeFilePath({ filePath, appDir }) {
+    if (appDir && filePath.startsWith(appDir + "/")) {
+        return filePath.substring(appDir.length + 1);
+    }
+    return filePath;
+}
+async function handleWriteAction({ fullFilePath, data, }) {
+    coreExports.info("Writing file");
+    if (!data.fileContents) {
+        throw new Error("File contents are required for write action");
+    }
+    await fs.writeFile(fullFilePath, data.fileContents, { encoding: "utf8" });
+    coreExports.info(`File written to ${fullFilePath}`);
+    return { stdout: "", stderr: "", exitCode: 0 };
+}
+async function handleReadAction({ fullFilePath, }) {
+    coreExports.info("Reading file");
+    const fileContents = await fs.readFile(fullFilePath, { encoding: "utf8" });
+    coreExports.info(`File read successfully`);
+    return { stdout: fileContents, stderr: "", exitCode: 0 };
+}
+async function handleLintAction({ lintScript, baseDir, fullFilePath, }) {
+    coreExports.info("Linting file");
+    const lintTemplate = Handlebars.compile(lintScript);
+    const relativeFilePath = path.relative(baseDir, fullFilePath);
+    const processedLintScript = lintTemplate({
+        file: relativeFilePath,
+    });
+    return await executeScript({
+        script: processedLintScript,
+        cwd: baseDir,
+        commandType: "Lint",
+    });
+}
+async function handleTestAction({ testScript, baseDir, fullFilePath, fullOriginalFilePath, data, }) {
+    coreExports.info("Testing file");
+    // Get relative paths for test command
+    let testFilePath = path.relative(baseDir, fullFilePath);
+    let origFilePath = fullOriginalFilePath
+        ? path.relative(baseDir, fullOriginalFilePath)
+        : undefined;
+    // Ensure paths don't incorrectly include appDir again
+    if (data.appDir) {
+        if (testFilePath.startsWith(data.appDir + "/")) {
+            testFilePath = testFilePath.substring(data.appDir.length + 1);
+        }
+        if (origFilePath?.startsWith(data.appDir + "/")) {
+            origFilePath = origFilePath.substring(data.appDir.length + 1);
+        }
+    }
+    const testTemplate = Handlebars.compile(testScript);
+    const processedTestScript = testTemplate({
+        file: testFilePath,
+        originalFile: origFilePath,
+    });
+    return await executeScript({
+        script: processedTestScript,
+        cwd: baseDir,
+        commandType: "Test",
+    });
+}
+async function handleCoverageAction({ coverageScript, baseDir, data, }) {
+    coreExports.info("Generating coverage report");
+    const writtenFilePaths = data.testFilePaths;
+    if (!writtenFilePaths) {
+        throw new Error("Test file paths are required for coverage action");
+    }
+    const relativeFilePaths = writtenFilePaths.map((filePath) => path.isAbsolute(filePath) ? path.relative(baseDir, filePath) : filePath);
+    const testFilePaths = relativeFilePaths.join(" ");
+    const coverageTemplate = Handlebars.compile(coverageScript);
+    const processedCoverageScript = coverageTemplate({
+        testFilePaths,
+    });
+    return await executeScript({
+        script: processedCoverageScript,
+        cwd: baseDir,
+        commandType: "Coverage",
+    });
+}
+async function executeScript({ script, cwd, commandType, }) {
+    coreExports.info(`Executing ${commandType.toLowerCase()} script in ${cwd}: ${script}`);
     return new Promise((resolve) => {
         exec$1(script, { cwd }, (error, stdout, stderr) => {
             const exitCode = error ? (error.code ?? 1) : 0;

@@ -1,5 +1,5 @@
 import * as core from "@actions/core";
-import { FileCommand, RunnerAction, Scripts } from "./types.js";
+import { FileCommand, RunnerAction, ScriptData } from "./types.js";
 import { processCommand } from "./handleCommands.js";
 import { ackCommand, pollCommands } from "./requests.js";
 
@@ -16,7 +16,7 @@ async function run() {
     const testScript = core.getInput("testScript", { required: true });
     const lintScript = core.getInput("lintScript", { required: false }) || undefined;
     const coverageScript = core.getInput("coverageScript", { required: false }) || undefined;
-    const scripts: Scripts = {
+    const scripts: ScriptData = {
       test: testScript,
       lint: lintScript,
       coverage: coverageScript,
