@@ -27253,17 +27253,25 @@ function requireCore () {
 
 var coreExports = requireCore();
 
+var CommandType;
+(function (CommandType) {
+    CommandType["FILE"] = "file";
+    CommandType["RUNNER"] = "runner";
+})(CommandType || (CommandType = {}));
 var FileAction;
 (function (FileAction) {
     FileAction["READ"] = "read";
     FileAction["WRITE"] = "write";
     FileAction["LINT"] = "lint";
     FileAction["TEST"] = "test";
+    FileAction["LINT_READ"] = "lint_read";
+    FileAction["WRITE_LINT_READ"] = "write_lint_read";
     FileAction["COVERAGE"] = "coverage";
 })(FileAction || (FileAction = {}));
 var RunnerAction;
 (function (RunnerAction) {
     RunnerAction["TERMINATE"] = "terminate";
+    RunnerAction["SCRIPT"] = "script";
 })(RunnerAction || (RunnerAction = {}));
 
 function commonjsRequire(path) {
@@ -55869,7 +55877,7 @@ const pollCommands = async ({ runId, runnerMetadata, }) => {
     });
     return response.data.commands;
 };
-const ackCommand = async ({ runId, commandId, }) => {
+const ackCommand = async ({ runId, commandId }) => {
     return withRetry(async () => {
         const response = await axios.post(`${serverUrl}/ack-command`, {
             runId,
@@ -55885,7 +55893,6 @@ const ackCommand = async ({ runId, commandId, }) => {
         else {
             coreExports.warning(`[ackCommand][${new Date().toISOString()}] Failed to ack command ${commandId}, server is probably not running`);
         }
-        return response.data;
     });
 };
 const sendCommandResult = async ({ runId, result, }) => {
@@ -55899,65 +55906,89 @@ const sendCommandResult = async ({ runId, result, }) => {
             signal: AbortSignal.timeout(5_000),
         });
         if (response.status === 200) {
-            coreExports.info(`[sendCommandResult][${new Date().toISOString()}] Successfully sent result for command ${result.commandId}`);
+            coreExports.info(`[sendCommandResult][${new Date().toISOString()}] Successfully sent result for command ${result.id}`);
         }
         else {
-            coreExports.warning(`[sendCommandResult][${new Date().toISOString()}] Failed to send result for command ${result.commandId}, server is probably not running. Server response: ${response.data}`);
+            coreExports.warning(`[sendCommandResult][${new Date().toISOString()}] Failed to send result for command ${result.id}, server is probably not running. Server response: ${response.data}`);
         }
     });
 };
 
+class ActionError extends Error {
+    constructor(message) {
+        super(`ActionError: ${message}`);
+        this.name = "ActionError";
+        // Maintains proper stack trace for where our error was thrown (only available on V8)
+        if (Error.captureStackTrace) {
+            Error.captureStackTrace(this, ActionError);
+        }
+    }
+}
+
 async function processCommand({ command, runId, scripts, }) {
-    const { data, actions } = command;
-    await ackCommand({ runId, commandId: command.id });
-    // Setup paths
-    const { baseDir, filePath: fullFilePath, originalFilePath: fullOriginalFilePath, } = setupPaths(data);
+    const { id: commandId, command: { data: commandData, action: commandAction }, } = command;
+    // Filtered for file command type before passing into the function
+    const data = commandData;
+    const action = commandAction;
+    await ackCommand({ runId, commandId });
+    const { filePath: fullFilePath } = setupPaths(data);
     // Ensure directory exists
     await fs.mkdir(path.dirname(fullFilePath), { recursive: true });
-    let result = { stdout: "", stderr: "", exitCode: 0 };
+    let result = {
+        stdout: "",
+        error: "Unknown error occurred",
+        stderr: "",
+        exitCode: 1,
+        type: CommandType.FILE,
+        completedAt: Date.now(),
+        fileContents: "",
+    };
     try {
-        // Process each action in sequence
-        if (actions.includes(FileAction.WRITE)) {
-            result = await handleWriteAction({ fullFilePath, data });
-        }
-        if (scripts.lint && actions.includes(FileAction.LINT)) {
-            result = await handleLintAction({ lintScript: scripts.lint, baseDir, fullFilePath });
-        }
-        if (actions.includes(FileAction.READ)) {
-            result = await handleReadAction({ fullFilePath });
-        }
-        if (actions.includes(FileAction.TEST)) {
-            result = await handleTestAction({
-                testScript: scripts.test,
-                baseDir,
-                fullFilePath,
-                fullOriginalFilePath,
-                data,
-            });
-        }
-        if (scripts.coverage && actions.includes(FileAction.COVERAGE)) {
-            result = await handleCoverageAction({
-                coverageScript: scripts.coverage,
-                baseDir,
-                data,
-            });
+        switch (action) {
+            case FileAction.WRITE:
+                result = await handleWriteAction(data);
+                break;
+            case FileAction.READ:
+                result = await handleReadAction(data);
+                break;
+            case FileAction.LINT:
+                result = await handleLintAction(scripts, data);
+                break;
+            case FileAction.LINT_READ:
+                result = await handleLintReadAction(scripts, data);
+                break;
+            case FileAction.WRITE_LINT_READ:
+                result = await handleWriteLintReadAction(scripts, data);
+                break;
+            case FileAction.TEST:
+                result = await handleTestAction(scripts, data);
+                break;
+            case FileAction.COVERAGE:
+                result = await handleCoverageAction(scripts, data);
+                break;
         }
     }
     catch (error) {
+        coreExports.warning(`Error processing command: ${error}`);
         result = {
+            exitCode: 1,
             stdout: "",
             stderr: error instanceof Error ? error.message : String(error),
-            exitCode: 1,
+            error: error instanceof Error ? error.message : String(error),
+            type: CommandType.FILE,
+            completedAt: Date.now(),
         };
     }
     const commandResult = {
-        commandId: command.id,
-        type: "file",
-        completedAt: new Date(),
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-        error: result.exitCode !== 0 ? result.stderr : undefined,
+        id: commandId,
+        result: {
+            type: CommandType.FILE,
+            completedAt: Date.now(),
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exitCode: result.exitCode,
+            error: result.exitCode !== 0 ? result.error : undefined,
+        },
     };
     coreExports.info(`
 [result]
@@ -55994,18 +56025,20 @@ function normalizeFilePath({ filePath, appDir }) {
     }
     return filePath;
 }
-async function handleWriteAction({ fullFilePath, data, }) {
+async function handleWriteAction(data) {
+    const { filePath: fullFilePath } = setupPaths(data);
     if (!data.fileContents) {
-        throw new Error("File contents are required for write action");
+        throw new ActionError(`Failed to write to file (${fullFilePath}). File contents are required for write action.`);
     }
     await fs.writeFile(fullFilePath, data.fileContents, { encoding: "utf8" });
     coreExports.info(`
 [write]
 File written to ${fullFilePath}
 `);
-    return { stdout: "", stderr: "", exitCode: 0 };
+    return { stdout: "", stderr: "", exitCode: 0, type: CommandType.FILE, completedAt: Date.now() };
 }
-async function handleReadAction({ fullFilePath, }) {
+async function handleReadAction(data) {
+    const { filePath: fullFilePath } = setupPaths(data);
     const fileContents = await fs.readFile(fullFilePath, { encoding: "utf8" });
     coreExports.info(`
 [read]
@@ -56013,9 +56046,31 @@ File: ${fullFilePath}
 Contents;
 ${fileContents}
 `);
-    return { stdout: fileContents, stderr: "", exitCode: 0 };
+    return {
+        fileContents,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+        type: CommandType.FILE,
+        completedAt: Date.now(),
+    };
 }
-async function handleLintAction({ lintScript, baseDir, fullFilePath, }) {
+async function handleLintAction(scripts, data, skipIfMissingLintScript = true) {
+    const { baseDir, filePath: fullFilePath } = setupPaths(data);
+    if (!scripts.lint && !skipIfMissingLintScript) {
+        throw new ActionError("Lint script is missing or invalid. Ensure that a valid lint script is provided in your workflow.");
+    }
+    else if (skipIfMissingLintScript) {
+        coreExports.warning("Lint script is missing. Skipping lint action.");
+        return {
+            stdout: "",
+            stderr: "Lint script missing or invalid, skipping lint action.",
+            exitCode: 0,
+            type: CommandType.FILE,
+            completedAt: Date.now(),
+        };
+    }
+    const lintScript = scripts.lint;
     coreExports.info(`
 [lint]
 File: ${fullFilePath}
@@ -56031,7 +56086,34 @@ File: ${fullFilePath}
         commandType: "Lint",
     });
 }
-async function handleTestAction({ testScript, baseDir, fullFilePath, fullOriginalFilePath, data, }) {
+async function handleLintReadAction(scripts, data) {
+    const lintResult = await handleLintAction(scripts, data);
+    if (lintResult.exitCode !== 0) {
+        return {
+            ...lintResult,
+            fileContents: "",
+        };
+    }
+    const readResult = await handleReadAction(data);
+    return readResult;
+}
+async function handleWriteLintReadAction(scripts, data) {
+    const writeResult = await handleWriteAction(data);
+    if (writeResult.exitCode !== 0) {
+        return {
+            ...writeResult,
+            fileContents: "",
+        };
+    }
+    const readResult = await handleLintReadAction(scripts, data);
+    return readResult;
+}
+async function handleTestAction(scripts, data) {
+    const { baseDir, filePath: fullFilePath, originalFilePath: fullOriginalFilePath, } = setupPaths(data);
+    const testScript = scripts.test;
+    if (!testScript || testScript === "") {
+        throw new ActionError("Test script is missing or invalid. Ensure that a valid test script is provided in your workflow.");
+    }
     // Get relative paths for test command
     let testFilePath = path.relative(baseDir, fullFilePath);
     let origFilePath = fullOriginalFilePath
@@ -56064,7 +56146,12 @@ ${result.stdout}
 `);
     return result;
 }
-async function handleCoverageAction({ coverageScript, baseDir, data, }) {
+async function handleCoverageAction(scripts, data) {
+    if (!scripts.coverage) {
+        throw new ActionError("Coverage script is missing or invalid. Ensure that a valid coverage script is provided in your workflow.");
+    }
+    const { baseDir } = setupPaths(data);
+    const coverageScript = scripts.coverage;
     coreExports.info(`
 [coverage]
 script:
@@ -56072,7 +56159,7 @@ ${coverageScript}
 `);
     const writtenFilePaths = data.testFilePaths;
     if (!writtenFilePaths) {
-        throw new Error("Test file paths are required for coverage action");
+        throw new ActionError("Test file paths are required for coverage action");
     }
     const relativeFilePaths = writtenFilePaths.map((filePath) => path.isAbsolute(filePath) ? path.relative(baseDir, filePath) : filePath);
     const testFilePaths = relativeFilePaths.join(" ");
@@ -56099,7 +56186,13 @@ async function executeScript({ script, cwd, commandType, }) {
                 coreExports.warning(`${commandType} error: ${error.message}`);
             }
             coreExports.info(`${commandType} command exited with code ${exitCode}`);
-            resolve({ stdout, stderr, exitCode });
+            resolve({
+                stdout,
+                stderr,
+                exitCode,
+                type: CommandType.FILE,
+                completedAt: Date.now(),
+            });
         });
     });
 }
@@ -56147,15 +56240,17 @@ async function run() {
                     commands.forEach((cmd) => {
                         coreExports.info(`Command:\n${JSON.stringify(cmd, null, 2)}`);
                     });
-                    if (commands.some((cmd) => cmd.type == "runner" && cmd.actions.includes(RunnerAction.TERMINATE))) {
+                    if (commands.some((cmd) => cmd.command.type === CommandType.RUNNER &&
+                        cmd.command.action === RunnerAction.TERMINATE)) {
                         await ackCommand({
                             runId,
-                            commandId: commands.find((cmd) => cmd.type == "runner" && cmd.actions.includes(RunnerAction.TERMINATE)).id,
+                            commandId: commands.find((cmd) => cmd.command.type === CommandType.RUNNER &&
+                                cmd.command.action === RunnerAction.TERMINATE).id,
                         });
                         coreExports.info("Terminate command received, exiting...");
                         break;
                     }
-                    const fileCommands = commands.filter((cmd) => cmd.type == "file");
+                    const fileCommands = commands.filter((cmd) => cmd.command.type == CommandType.FILE);
                     // Not awaiting here to avoid blocking the main thread
                     Promise.all(fileCommands.map((command) => processCommand({ runId, command, scripts }))).catch((error) => {
                         coreExports.warning(`Error in command batch processing: ${error}`);

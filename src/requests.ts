@@ -1,6 +1,6 @@
 import axios from "axios";
 import * as core from "@actions/core";
-import { Command, FileCommandResult } from "./types.js";
+import { IActionCommand, IActionCommandResult } from "./types.js";
 
 const serverUrl = core.getInput("tuskUrl", { required: true });
 const authToken = core.getInput("authToken", { required: true });
@@ -47,7 +47,7 @@ export const pollCommands = async ({
 }: {
   runId: string;
   runnerMetadata: Record<string, string | undefined>;
-}): Promise<Command[]> => {
+}): Promise<IActionCommand[]> => {
   const response = await axios.get(`${serverUrl}/poll-commands`, {
     params: {
       runId,
@@ -58,16 +58,10 @@ export const pollCommands = async ({
     headers,
   });
 
-  return response.data.commands as Command[];
+  return response.data.commands as IActionCommand[];
 };
 
-export const ackCommand = async ({
-  runId,
-  commandId,
-}: {
-  runId: string;
-  commandId: string;
-}): Promise<Command> => {
+export const ackCommand = async ({ runId, commandId }: { runId: string; commandId: string }) => {
   return withRetry(async () => {
     const response = await axios.post(
       `${serverUrl}/ack-command`,
@@ -91,8 +85,6 @@ export const ackCommand = async ({
         `[ackCommand][${new Date().toISOString()}] Failed to ack command ${commandId}, server is probably not running`,
       );
     }
-
-    return response.data as Command;
   });
 };
 
@@ -101,7 +93,7 @@ export const sendCommandResult = async ({
   result,
 }: {
   runId: string;
-  result: FileCommandResult;
+  result: IActionCommandResult;
 }): Promise<void> => {
   return withRetry(async () => {
     const response = await axios.post(
@@ -119,11 +111,11 @@ export const sendCommandResult = async ({
 
     if (response.status === 200) {
       core.info(
-        `[sendCommandResult][${new Date().toISOString()}] Successfully sent result for command ${result.commandId}`,
+        `[sendCommandResult][${new Date().toISOString()}] Successfully sent result for command ${result.id}`,
       );
     } else {
       core.warning(
-        `[sendCommandResult][${new Date().toISOString()}] Failed to send result for command ${result.commandId}, server is probably not running. Server response: ${response.data}`,
+        `[sendCommandResult][${new Date().toISOString()}] Failed to send result for command ${result.id}, server is probably not running. Server response: ${response.data}`,
       );
     }
   });

@@ -1,5 +1,5 @@
 import * as core from "@actions/core";
-import { FileCommand, RunnerAction, ScriptData } from "./types.js";
+import { CommandType, RunnerAction, ScriptData } from "./types.js";
 import { processCommand } from "./handleCommands.js";
 import { ackCommand, pollCommands } from "./requests.js";
 
@@ -63,13 +63,17 @@ async function run() {
 
           if (
             commands.some(
-              (cmd) => cmd.type == "runner" && cmd.actions.includes(RunnerAction.TERMINATE),
+              (cmd) =>
+                cmd.command.type === CommandType.RUNNER &&
+                cmd.command.action === RunnerAction.TERMINATE,
             )
           ) {
             await ackCommand({
               runId,
               commandId: commands.find(
-                (cmd) => cmd.type == "runner" && cmd.actions.includes(RunnerAction.TERMINATE),
+                (cmd) =>
+                  cmd.command.type === CommandType.RUNNER &&
+                  cmd.command.action === RunnerAction.TERMINATE,
               )!.id,
             });
 
@@ -77,7 +81,7 @@ async function run() {
             break;
           }
 
-          const fileCommands = commands.filter((cmd) => cmd.type == "file") as FileCommand[];
+          const fileCommands = commands.filter((cmd) => cmd.command.type == CommandType.FILE);
 
           // Not awaiting here to avoid blocking the main thread
           Promise.all(

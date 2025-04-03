@@ -1,14 +1,13 @@
-export interface BaseCommand {
-  id: string;
-  createdAt: Date;
+export interface CommandResult {
+  exitCode: number;
+  error?: string;
+  stdout: string;
+  stderr: string;
 }
 
-export interface FileData {
-  filePath: string;
-  fileContents?: string;
-  originalFilePath?: string;
-  appDir?: string;
-  testFilePaths?: string[]; // For test coverage
+export enum CommandType {
+  FILE = "file",
+  RUNNER = "runner",
 }
 
 export enum FileAction {
@@ -16,43 +15,82 @@ export enum FileAction {
   WRITE = "write",
   LINT = "lint",
   TEST = "test",
+  LINT_READ = "lint_read",
+  WRITE_LINT_READ = "write_lint_read",
   COVERAGE = "coverage",
 }
 
 export enum RunnerAction {
   TERMINATE = "terminate",
+  SCRIPT = "script",
 }
 
-export interface FileCommand extends BaseCommand {
-  type: "file";
-  actions: FileAction[];
-  data: FileData;
+export interface IFileCommandData {
+  filePath: string;
+  fileContents?: string;
+  originalFilePath?: string; // For running test which require both source and test files (e.g., Go tests)
+  appDir?: string;
+  testFilePaths?: string[]; // For test coverage
 }
 
-export interface RunnerCommand extends BaseCommand {
-  type: "runner";
-  actions: RunnerAction[];
+export interface IRunnerCommandData {
+  script?: string;
 }
 
-export type Command = FileCommand | RunnerCommand;
-
-export interface FileCommandResult {
-  commandId: string;
-  type: "file";
-  exitCode: number;
-  error?: string;
-  stdout: string;
-  stderr: string;
-  completedAt: Date;
+export interface IFileCommand {
+  type: CommandType.FILE;
+  action: FileAction;
+  data: IFileCommandData;
 }
 
-export interface RunnerCommandResult {
-  commandId: string;
-  type: "runner";
-  completedAt: Date;
+export interface IRunnerCommand {
+  type: CommandType.RUNNER;
+  action: RunnerAction;
+  data?: IRunnerCommandData; // For raw script commands
 }
 
-export type CommandResult = FileCommandResult | RunnerCommandResult;
+export type ICommandInfo = IFileCommand | IRunnerCommand;
+
+export interface IBaseResult {
+  completedAt: number; // Epoch time
+}
+
+export interface IBaseCommandResult extends IBaseResult, CommandResult {}
+
+export interface IBaseFileCommandResult extends IBaseCommandResult {
+  type: CommandType.FILE;
+}
+
+export interface IReadFileCommandResult extends IBaseFileCommandResult {
+  fileContents: string;
+}
+
+export type IFileCommandResult = IBaseFileCommandResult | IReadFileCommandResult;
+
+// Returned by terminate command
+export interface IBaseRunnerCommandResult extends IBaseResult {
+  type: CommandType.RUNNER;
+}
+
+// Returned by raw script command
+export interface IScriptRunnerCommandResult extends IBaseRunnerCommandResult, IBaseCommandResult {}
+
+export type IRunnerCommandResult = IBaseRunnerCommandResult | IScriptRunnerCommandResult;
+
+export type ICommandResult = IFileCommandResult | IRunnerCommandResult;
+
+// Shared between the GithubActionController and the GH runner
+export interface IActionCommand {
+  id: string;
+  createdAt: Date;
+  command: ICommandInfo;
+}
+
+// Shared between the GithubActionController and the GH runner
+export interface IActionCommandResult {
+  id: string;
+  result: ICommandResult;
+}
 
 export interface ScriptData {
   test: string;

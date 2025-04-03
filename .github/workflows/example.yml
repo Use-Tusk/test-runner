@@ -22,8 +22,6 @@ jobs:
       - name: Checkout
         id: checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.commitSha }}
 
       - name: Start runner
         id: test-action
@@ -33,7 +31,6 @@ jobs:
           tuskUrl: ${{ github.event.inputs.tuskUrl }}
           commitSha: ${{ github.event.inputs.commitSha }}
           authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
-          lintScript: "black {{file}}"
           testScript: "pytest {{file}}"
           coverageScript: |
             coverage run -m pytest {{testFilePaths}}
