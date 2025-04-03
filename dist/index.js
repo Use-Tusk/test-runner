@@ -55918,7 +55918,6 @@ class ActionError extends Error {
     constructor(message) {
         super(`ActionError: ${message}`);
         this.name = "ActionError";
-        // Maintains proper stack trace for where our error was thrown (only available on V8)
         if (Error.captureStackTrace) {
             Error.captureStackTrace(this, ActionError);
         }
