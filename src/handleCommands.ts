@@ -98,6 +98,8 @@ export async function processCommand({
       stderr: result.stderr,
       exitCode: result.exitCode,
       error: result.exitCode !== 0 ? result.error : undefined,
+      fileContents:
+        "fileContents" in result ? (result as IReadFileCommandResult).fileContents : undefined,
     },
   };
 

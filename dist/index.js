@@ -55987,6 +55987,7 @@ async function processCommand({ command, runId, scripts, }) {
             stderr: result.stderr,
             exitCode: result.exitCode,
             error: result.exitCode !== 0 ? result.error : undefined,
+            fileContents: "fileContents" in result ? result.fileContents : undefined,
         },
     };
     coreExports.info(`
