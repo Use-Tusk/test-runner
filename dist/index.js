@@ -56133,13 +56133,20 @@ async function handleTestAction(scripts, data) {
         file: testFilePath,
         originalFile: origFilePath,
     });
+    coreExports.info(`
+[test-execute]
+Running script: ${processedTestScript}
+Working directory: ${baseDir}
+Test file path: ${testFilePath}
+Original file path: ${origFilePath}
+`);
     const result = await executeScript({
         script: processedTestScript,
         cwd: baseDir,
         commandType: "Test",
     });
     coreExports.info(`
-[test]
+[test-result]
 File: ${fullFilePath}
 Result:
 ${result.stdout}
@@ -56176,23 +56183,47 @@ ${coverageScript}
 async function executeScript({ script, cwd, commandType, }) {
     coreExports.info(`Executing ${commandType.toLowerCase()} script in ${cwd}: ${script}`);
     return new Promise((resolve) => {
-        exec$1(script, { cwd }, (error, stdout, stderr) => {
+        const timeoutDuration = 1 * 60 * 1000; // 1 minute timeout
+        const maxBufferSize = 10 * 1024 * 1024; // 10 MB buffer
+        const child = exec$1(script, { cwd, timeout: timeoutDuration, maxBuffer: maxBufferSize }, (error, stdout, stderr) => {
             const exitCode = error ? (error.code ?? 1) : 0;
+            coreExports.info(`>>> [exec-callback entry] ${commandType} command finished processing. Script: ${script}`);
             if (stdout)
-                coreExports.info(`${commandType} stdout: ${stdout}`);
+                coreExports.info(`[exec-callback] ${commandType} stdout: ${stdout}`);
             if (stderr)
-                coreExports.warning(`${commandType} stderr: ${stderr}`);
+                coreExports.warning(`[exec-callback] ${commandType} stderr: ${stderr}`);
             if (error) {
-                coreExports.warning(`${commandType} error: ${error.message}`);
+                if (error.signal === "SIGTERM" || error.killed) {
+                    coreExports.warning(`[exec-callback] ${commandType} command timed out or was killed. Timeout: ${timeoutDuration / 1000}s.`);
+                    error.message = `Command timed out or killed (signal: ${error.signal}): ${error.message}`;
+                }
+                else {
+                    coreExports.warning(`[exec-callback] ${commandType} error: ${error.message}`);
+                }
             }
-            coreExports.info(`${commandType} command exited with code ${exitCode}`);
+            coreExports.info(`[exec-callback] ${commandType} command exited with code ${exitCode}`);
             resolve({
                 stdout,
                 stderr,
                 exitCode,
                 type: CommandType.FILE,
+                error: error ? error.message : undefined,
                 completedAt: Date.now(),
             });
+        });
+        // Log when the process exits/closes, separate from the callback
+        child.on("exit", (code, signal) => {
+            coreExports.info(`>>> [exec-exit event] ${commandType} process exited. Code: ${code}, Signal: ${signal}`);
+        });
+        child.on("close", () => {
+            coreExports.info(`>>> [exec-close event] ${commandType} process streams closed.`);
+        });
+        child.on("error", (err) => {
+            // This event fires for errors like command not found, ENOENT, etc.
+            coreExports.warning(`>>> [exec-process error event] ${commandType} child process error: ${err.message}`);
+            // Resolve here might be problematic if the main callback *also* fires.
+            // The main callback should handle most errors, including non-zero exit codes.
+            // Let's rely on the main callback to resolve.
         });
     });
 }
