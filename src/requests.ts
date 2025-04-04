@@ -2,7 +2,7 @@ import axios from "axios";
 import * as core from "@actions/core";
 import { IActionCommand, IActionCommandResult } from "./types.js";
 
-const serverUrl = core.getInput("tuskUrl", { required: true });
+const serverUrl = core.getInput("tuskUrl", { required: true }).replace(/\/$/, "");
 const authToken = core.getInput("authToken", { required: true });
 const timeoutMs = 5_000;
 

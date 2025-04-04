@@ -55834,7 +55834,7 @@ const {
   mergeConfig
 } = axios;
 
-const serverUrl = coreExports.getInput("tuskUrl", { required: true });
+const serverUrl = coreExports.getInput("tuskUrl", { required: true }).replace(/\/$/, "");
 const authToken = coreExports.getInput("authToken", { required: true });
 const timeoutMs = 5_000;
 const headers = {
