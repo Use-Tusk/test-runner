@@ -56183,7 +56183,7 @@ ${coverageScript}
 async function executeScript({ script, cwd, commandType, }) {
     coreExports.info(`Executing ${commandType.toLowerCase()} script in ${cwd}: ${script}`);
     return new Promise((resolve) => {
-        const timeoutDuration = 1 * 60 * 1000; // 1 minute timeout
+        const timeoutDuration = 5 * 60 * 1000; // 5 minute timeout
         const maxBufferSize = 10 * 1024 * 1024; // 10 MB buffer
         const child = exec$1(script, { cwd, timeout: timeoutDuration, maxBuffer: maxBufferSize }, (error, stdout, stderr) => {
             const exitCode = error ? (error.code ?? 1) : 0;
