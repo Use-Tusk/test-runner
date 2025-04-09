@@ -1,6 +1,6 @@
 import * as core from "@actions/core";
 import { CommandType, RunnerAction, ScriptData } from "./types.js";
-import { processCommand } from "./handleCommands.js";
+import { processCommandsWithConcurrency } from "./handleCommands.js";
 import { ackCommand, pollCommands } from "./requests.js";
 
 async function run() {
@@ -83,11 +83,16 @@ async function run() {
 
           const fileCommands = commands.filter((cmd) => cmd.command.type == CommandType.FILE);
 
-          // Not awaiting here to avoid blocking the main thread
-          Promise.all(
-            fileCommands.map((command) => processCommand({ runId, command, scripts })),
-          ).catch((error) => {
-            core.warning(`Error in command batch processing: ${error}`);
+          // Start processing in the background, do not await here to keep polling loop active
+          processCommandsWithConcurrency({
+            commands: fileCommands,
+            runId,
+            scripts,
+          }).catch((error) => {
+            // Catch unexpected errors from the processCommandsWithConcurrency orchestrator itself
+            core.error(
+              `Unexpected error during background command processing orchestrator: ${error}`,
+            );
           });
         } else {
           core.debug("No commands received");

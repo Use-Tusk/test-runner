@@ -18,6 +18,67 @@ import Handlebars from "handlebars";
 import { ackCommand, sendCommandResult } from "./requests.js";
 import { ActionError } from "./errors.js";
 
+export async function processCommandsWithConcurrency({
+  commands,
+  runId,
+  scripts,
+  limit = 5,
+}: {
+  commands: IActionCommand[];
+  runId: string;
+  scripts: ScriptData;
+  limit?: number;
+}): Promise<void> {
+  core.info(
+    `Processing ${commands.length} commands in background with concurrency limit ${limit}...`,
+  );
+  let processedCount = 0;
+  let totalErrorCount = 0;
+
+  for (let i = 0; i < commands.length; i += limit) {
+    const chunk = commands.slice(i, i + limit);
+    const chunkNumber = Math.floor(i / limit) + 1;
+    const totalChunks = Math.ceil(commands.length / limit);
+    core.info(`Processing command chunk ${chunkNumber}/${totalChunks} (size: ${chunk.length})`);
+
+    const chunkPromises = chunk.map((command) =>
+      processCommand({ runId, command, scripts })
+        // Add individual catch blocks to prevent Promise.allSettled from hiding specific errors
+        // and to count errors accurately.
+        .catch((error) => {
+          core.warning(
+            `Error processing command ${command.id} in chunk ${chunkNumber}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          totalErrorCount++;
+          // Return an indicator of failure for this specific command
+          return { error: true, commandId: command.id, reason: String(error) };
+        }),
+    );
+
+    // Wait for all promises in the current chunk to settle (either finish or fail)
+    const results = await Promise.allSettled(chunkPromises);
+
+    // Log chunk completion (optional: could analyze results further)
+    const chunkErrors = results.filter(
+      (r) => r.status === "rejected" || (r.status === "fulfilled" && r.value?.error),
+    ).length;
+    processedCount += chunk.length;
+    core.info(
+      `Finished processing chunk ${chunkNumber}. Total processed: ${processedCount}/${commands.length}. Errors in this chunk: ${chunkErrors}`,
+    );
+  }
+
+  core.info(
+    `Finished background processing all ${commands.length} commands. Total errors encountered: ${totalErrorCount}.`,
+  );
+  if (totalErrorCount > 0) {
+    // Indicate overall issues if any command failed.
+    core.warning(`Encountered ${totalErrorCount} errors during background command processing.`);
+    // Depending on requirements, you might want to throw an error here
+    // to be caught by the final .catch, but that might be too noisy.
+  }
+}
+
 export async function processCommand({
   command,
   runId,

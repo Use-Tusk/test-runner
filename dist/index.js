@@ -55927,6 +55927,39 @@ class ActionError extends Error {
     }
 }
 
+async function processCommandsWithConcurrency({ commands, runId, scripts, limit = 5, }) {
+    coreExports.info(`Processing ${commands.length} commands in background with concurrency limit ${limit}...`);
+    let processedCount = 0;
+    let totalErrorCount = 0;
+    for (let i = 0; i < commands.length; i += limit) {
+        const chunk = commands.slice(i, i + limit);
+        const chunkNumber = Math.floor(i / limit) + 1;
+        const totalChunks = Math.ceil(commands.length / limit);
+        coreExports.info(`Processing command chunk ${chunkNumber}/${totalChunks} (size: ${chunk.length})`);
+        const chunkPromises = chunk.map((command) => processCommand({ runId, command, scripts })
+            // Add individual catch blocks to prevent Promise.allSettled from hiding specific errors
+            // and to count errors accurately.
+            .catch((error) => {
+            coreExports.warning(`Error processing command ${command.id} in chunk ${chunkNumber}: ${error instanceof Error ? error.message : String(error)}`);
+            totalErrorCount++;
+            // Return an indicator of failure for this specific command
+            return { error: true, commandId: command.id, reason: String(error) };
+        }));
+        // Wait for all promises in the current chunk to settle (either finish or fail)
+        const results = await Promise.allSettled(chunkPromises);
+        // Log chunk completion (optional: could analyze results further)
+        const chunkErrors = results.filter((r) => r.status === "rejected" || (r.status === "fulfilled" && r.value?.error)).length;
+        processedCount += chunk.length;
+        coreExports.info(`Finished processing chunk ${chunkNumber}. Total processed: ${processedCount}/${commands.length}. Errors in this chunk: ${chunkErrors}`);
+    }
+    coreExports.info(`Finished background processing all ${commands.length} commands. Total errors encountered: ${totalErrorCount}.`);
+    if (totalErrorCount > 0) {
+        // Indicate overall issues if any command failed.
+        coreExports.warning(`Encountered ${totalErrorCount} errors during background command processing.`);
+        // Depending on requirements, you might want to throw an error here
+        // to be caught by the final .catch, but that might be too noisy.
+    }
+}
 async function processCommand({ command, runId, scripts, }) {
     const { id: commandId, command: { data: commandData, action: commandAction }, } = command;
     // Filtered for file command type before passing into the function
@@ -56285,9 +56318,14 @@ async function run() {
                         break;
                     }
                     const fileCommands = commands.filter((cmd) => cmd.command.type == CommandType.FILE);
-                    // Not awaiting here to avoid blocking the main thread
-                    Promise.all(fileCommands.map((command) => processCommand({ runId, command, scripts }))).catch((error) => {
-                        coreExports.warning(`Error in command batch processing: ${error}`);
+                    // Start processing in the background, do not await here to keep polling loop active
+                    processCommandsWithConcurrency({
+                        commands: fileCommands,
+                        runId,
+                        scripts,
+                    }).catch((error) => {
+                        // Catch unexpected errors from the processCommandsWithConcurrency orchestrator itself
+                        coreExports.error(`Unexpected error during background command processing orchestrator: ${error}`);
                     });
                 }
                 else {
