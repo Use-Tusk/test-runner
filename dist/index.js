@@ -56096,7 +56096,7 @@ async function handleLintAction(scripts, data, skipIfMissingLintScript = true) {
     if (!scripts.lint && !skipIfMissingLintScript) {
         throw new ActionError("Lint script is missing or invalid. Ensure that a valid lint script is provided in your workflow.");
     }
-    else if (skipIfMissingLintScript) {
+    else if (!scripts.lint) {
         coreExports.warning("Lint script is missing. Skipping lint action.");
         return {
             stdout: "",

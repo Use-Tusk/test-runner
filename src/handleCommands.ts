@@ -256,7 +256,7 @@ async function handleLintAction(
     throw new ActionError(
       "Lint script is missing or invalid. Ensure that a valid lint script is provided in your workflow.",
     );
-  } else if (skipIfMissingLintScript) {
+  } else if (!scripts.lint) {
     core.warning("Lint script is missing. Skipping lint action.");
     return {
       stdout: "",
