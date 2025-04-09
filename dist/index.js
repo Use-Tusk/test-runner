@@ -55843,6 +55843,7 @@ const headers = {
 };
 async function withRetry(requestFn, maxRetries = 3) {
     let lastError = null;
+    const retryableStatusCodes = [500, 502, 503, 504];
     for (let attempt = 0; attempt < maxRetries + 1; attempt++) {
         try {
             return await requestFn();
@@ -55850,7 +55851,9 @@ async function withRetry(requestFn, maxRetries = 3) {
         catch (error) {
             lastError = error;
             // Check if it's a 503 error that we should retry
-            if (axios.isAxiosError(error) && error.response?.status === 503) {
+            if (axios.isAxiosError(error) &&
+                error.response?.status &&
+                retryableStatusCodes.includes(error.response.status)) {
                 if (attempt < maxRetries) {
                     const delayMs = 2 ** attempt * 1000; // Exponential backoff: 1s, 2s, 4s
                     coreExports.info(`[pollCommands][${new Date().toISOString()}] Received 503 error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
@@ -55858,7 +55861,7 @@ async function withRetry(requestFn, maxRetries = 3) {
                     continue;
                 }
             }
-            // For non-503 errors or if we've exhausted retries, throw the error
+            // For non-retryable errors or if we've exhausted retries, throw the error
             throw error;
         }
     }
