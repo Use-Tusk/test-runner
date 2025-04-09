@@ -55927,6 +55927,41 @@ class ActionError extends Error {
     }
 }
 
+async function processRunnerCommand({ command, runId, }) {
+    const { id: commandId, command: { data: commandData, action: commandAction }, } = command;
+    const data = commandData;
+    const action = commandAction;
+    await ackCommand({ runId, commandId });
+    let result = {
+        stdout: "",
+        stderr: "",
+        error: "Unknown error occurred",
+        exitCode: 1,
+        type: CommandType.RUNNER,
+        completedAt: Date.now(),
+    };
+    switch (action) {
+        case RunnerAction.SCRIPT:
+            coreExports.info("Script command received, executing...");
+            if (!data.script) {
+                throw new ActionError("Script is missing or invalid. Ensure that a valid script is provided in your workflow.");
+            }
+            result = (await executeScript({
+                script: data.script,
+                cwd: process.cwd(),
+                commandName: "Script",
+                commandType: CommandType.RUNNER,
+            }));
+            break;
+    }
+    await sendCommandResult({
+        runId,
+        result: {
+            id: commandId,
+            result,
+        },
+    });
+}
 async function processCommandsWithConcurrency({ commands, runId, scripts, limit = 5, }) {
     coreExports.info(`Processing ${commands.length} commands in background with concurrency limit ${limit}...`);
     let processedCount = 0;
@@ -55936,15 +55971,31 @@ async function processCommandsWithConcurrency({ commands, runId, scripts, limit 
         const chunkNumber = Math.floor(i / limit) + 1;
         const totalChunks = Math.ceil(commands.length / limit);
         coreExports.info(`Processing command chunk ${chunkNumber}/${totalChunks} (size: ${chunk.length})`);
-        const chunkPromises = chunk.map((command) => processCommand({ runId, command, scripts })
+        const chunkPromises = chunk.map((command) => {
+            let processPromise;
+            if (command.command.type === CommandType.FILE) {
+                processPromise = processFileCommand({ runId, command, scripts });
+            }
+            else if (command.command.type === CommandType.RUNNER) {
+                processPromise = processRunnerCommand({ runId, command });
+            }
+            else {
+                coreExports.error(`Unknown command type for command ${command.id}: ${JSON.stringify(command)}`);
+                processPromise = Promise.resolve({
+                    error: true,
+                    commandId: command.id,
+                    reason: `Unknown command type: ${JSON.stringify(command)}`,
+                });
+            }
             // Add individual catch blocks to prevent Promise.allSettled from hiding specific errors
             // and to count errors accurately.
-            .catch((error) => {
-            coreExports.warning(`Error processing command ${command.id} in chunk ${chunkNumber}: ${error instanceof Error ? error.message : String(error)}`);
-            totalErrorCount++;
-            // Return an indicator of failure for this specific command
-            return { error: true, commandId: command.id, reason: String(error) };
-        }));
+            return processPromise.catch((error) => {
+                coreExports.warning(`Error processing command ${command.id} (type: ${command.command.type}) in chunk ${chunkNumber}: ${error instanceof Error ? error.message : String(error)}`);
+                totalErrorCount++;
+                // Return an indicator of failure for this specific command
+                return { error: true, commandId: command.id, reason: String(error) };
+            });
+        });
         // Wait for all promises in the current chunk to settle (either finish or fail)
         const results = await Promise.allSettled(chunkPromises);
         // Log chunk completion (optional: could analyze results further)
@@ -55960,7 +56011,7 @@ async function processCommandsWithConcurrency({ commands, runId, scripts, limit 
         // to be caught by the final .catch, but that might be too noisy.
     }
 }
-async function processCommand({ command, runId, scripts, }) {
+async function processFileCommand({ command, runId, scripts, }) {
     const { id: commandId, command: { data: commandData, action: commandAction }, } = command;
     // Filtered for file command type before passing into the function
     const data = commandData;
@@ -56116,11 +56167,12 @@ File: ${fullFilePath}
     const processedLintScript = lintTemplate({
         file: relativeFilePath,
     });
-    return await executeScript({
+    return (await executeScript({
         script: processedLintScript,
         cwd: baseDir,
-        commandType: "Lint",
-    });
+        commandName: "Lint",
+        commandType: CommandType.FILE,
+    }));
 }
 async function handleLintReadAction(scripts, data) {
     const lintResult = await handleLintAction(scripts, data);
@@ -56176,11 +56228,12 @@ Working directory: ${baseDir}
 Test file path: ${testFilePath}
 Original file path: ${origFilePath}
 `);
-    const result = await executeScript({
+    const result = (await executeScript({
         script: processedTestScript,
         cwd: baseDir,
-        commandType: "Test",
-    });
+        commandName: "Test",
+        commandType: CommandType.FILE,
+    }));
     coreExports.info(`
 [test-result]
 File: ${fullFilePath}
@@ -56210,53 +56263,67 @@ ${coverageScript}
     const processedCoverageScript = coverageTemplate({
         testFilePaths,
     });
-    return await executeScript({
+    return (await executeScript({
         script: processedCoverageScript,
         cwd: baseDir,
-        commandType: "Coverage",
-    });
+        commandName: "Coverage",
+        commandType: CommandType.FILE,
+    }));
 }
-async function executeScript({ script, cwd, commandType, }) {
-    coreExports.info(`Executing ${commandType.toLowerCase()} script in ${cwd}: ${script}`);
+async function executeScript({ script, cwd, commandName, commandType, }) {
+    coreExports.info(`Executing ${commandName.toLowerCase()} script in ${cwd}: ${script}`);
     return new Promise((resolve) => {
         const timeoutDuration = 5 * 60 * 1000; // 5 minute timeout
         const maxBufferSize = 10 * 1024 * 1024; // 10 MB buffer
         const child = exec$1(script, { cwd, timeout: timeoutDuration, maxBuffer: maxBufferSize }, (error, stdout, stderr) => {
             const exitCode = error ? (error.code ?? 1) : 0;
-            coreExports.info(`>>> [exec-callback entry] ${commandType} command finished processing. Script: ${script}`);
+            coreExports.info(`>>> [exec-callback entry] ${commandName} command finished processing. Script: ${script}`);
             if (stdout)
-                coreExports.info(`[exec-callback] ${commandType} stdout: ${stdout}`);
+                coreExports.info(`[exec-callback] ${commandName} stdout: ${stdout}`);
             if (stderr)
-                coreExports.warning(`[exec-callback] ${commandType} stderr: ${stderr}`);
+                coreExports.warning(`[exec-callback] ${commandName} stderr: ${stderr}`);
             if (error) {
                 if (error.signal === "SIGTERM" || error.killed) {
-                    coreExports.warning(`[exec-callback] ${commandType} command timed out or was killed. Timeout: ${timeoutDuration / 1000}s.`);
+                    coreExports.warning(`[exec-callback] ${commandName} command timed out or was killed. Timeout: ${timeoutDuration / 1000}s.`);
                     error.message = `Command timed out or killed (signal: ${error.signal}): ${error.message}`;
                 }
                 else {
-                    coreExports.warning(`[exec-callback] ${commandType} error: ${error.message}`);
+                    coreExports.warning(`[exec-callback] ${commandName} error: ${error.message}`);
                 }
             }
-            coreExports.info(`[exec-callback] ${commandType} command exited with code ${exitCode}`);
-            resolve({
+            coreExports.info(`[exec-callback] ${commandName} command exited with code ${exitCode}`);
+            const baseResultObject = {
                 stdout,
                 stderr,
                 exitCode,
-                type: CommandType.FILE,
                 error: error ? error.message : undefined,
                 completedAt: Date.now(),
-            });
+            };
+            if (commandType === CommandType.FILE) {
+                const fileResult = {
+                    ...baseResultObject,
+                    type: CommandType.FILE,
+                };
+                resolve(fileResult);
+            }
+            else {
+                const runnerResult = {
+                    ...baseResultObject,
+                    type: CommandType.RUNNER,
+                };
+                resolve(runnerResult);
+            }
         });
         // Log when the process exits/closes, separate from the callback
         child.on("exit", (code, signal) => {
-            coreExports.info(`>>> [exec-exit event] ${commandType} process exited. Code: ${code}, Signal: ${signal}`);
+            coreExports.info(`>>> [exec-exit event] ${commandName} process exited. Code: ${code}, Signal: ${signal}`);
         });
         child.on("close", () => {
-            coreExports.info(`>>> [exec-close event] ${commandType} process streams closed.`);
+            coreExports.info(`>>> [exec-close event] ${commandName} process streams closed.`);
         });
         child.on("error", (err) => {
             // This event fires for errors like command not found, ENOENT, etc.
-            coreExports.warning(`>>> [exec-process error event] ${commandType} child process error: ${err.message}`);
+            coreExports.warning(`>>> [exec-process error event] ${commandName} child process error: ${err.message}`);
             // Resolve here might be problematic if the main callback *also* fires.
             // The main callback should handle most errors, including non-zero exit codes.
             // Let's rely on the main callback to resolve.
@@ -56317,10 +56384,9 @@ async function run() {
                         coreExports.info("Terminate command received, exiting...");
                         break;
                     }
-                    const fileCommands = commands.filter((cmd) => cmd.command.type == CommandType.FILE);
                     // Start processing in the background, do not await here to keep polling loop active
                     processCommandsWithConcurrency({
-                        commands: fileCommands,
+                        commands,
                         runId,
                         scripts,
                     }).catch((error) => {

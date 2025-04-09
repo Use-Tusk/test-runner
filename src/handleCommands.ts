@@ -10,6 +10,9 @@ import {
   IFileCommandResult,
   IBaseFileCommandResult,
   IReadFileCommandResult,
+  RunnerAction,
+  IRunnerCommandData,
+  IScriptRunnerCommandResult,
 } from "./types.js";
 import { exec } from "child_process";
 import * as fs from "fs/promises";
@@ -17,6 +20,58 @@ import * as path from "path";
 import Handlebars from "handlebars";
 import { ackCommand, sendCommandResult } from "./requests.js";
 import { ActionError } from "./errors.js";
+
+async function processRunnerCommand({
+  command,
+  runId,
+}: {
+  command: IActionCommand;
+  runId: string;
+}): Promise<void> {
+  const {
+    id: commandId,
+    command: { data: commandData, action: commandAction },
+  } = command;
+
+  const data = commandData as IRunnerCommandData;
+  const action = commandAction as RunnerAction;
+
+  await ackCommand({ runId, commandId });
+
+  let result: IScriptRunnerCommandResult = {
+    stdout: "",
+    stderr: "",
+    error: "Unknown error occurred",
+    exitCode: 1,
+    type: CommandType.RUNNER,
+    completedAt: Date.now(),
+  };
+
+  switch (action) {
+    case RunnerAction.SCRIPT:
+      core.info("Script command received, executing...");
+      if (!data.script) {
+        throw new ActionError(
+          "Script is missing or invalid. Ensure that a valid script is provided in your workflow.",
+        );
+      }
+      result = (await executeScript({
+        script: data.script,
+        cwd: process.cwd(),
+        commandName: "Script",
+        commandType: CommandType.RUNNER,
+      })) as IScriptRunnerCommandResult;
+      break;
+  }
+
+  await sendCommandResult({
+    runId,
+    result: {
+      id: commandId,
+      result,
+    },
+  });
+}
 
 export async function processCommandsWithConcurrency({
   commands,
@@ -41,19 +96,33 @@ export async function processCommandsWithConcurrency({
     const totalChunks = Math.ceil(commands.length / limit);
     core.info(`Processing command chunk ${chunkNumber}/${totalChunks} (size: ${chunk.length})`);
 
-    const chunkPromises = chunk.map((command) =>
-      processCommand({ runId, command, scripts })
-        // Add individual catch blocks to prevent Promise.allSettled from hiding specific errors
-        // and to count errors accurately.
-        .catch((error) => {
-          core.warning(
-            `Error processing command ${command.id} in chunk ${chunkNumber}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          totalErrorCount++;
-          // Return an indicator of failure for this specific command
-          return { error: true, commandId: command.id, reason: String(error) };
-        }),
-    );
+    const chunkPromises = chunk.map((command) => {
+      let processPromise: Promise<void | { error: boolean; commandId: string; reason: string }>;
+
+      if (command.command.type === CommandType.FILE) {
+        processPromise = processFileCommand({ runId, command, scripts });
+      } else if (command.command.type === CommandType.RUNNER) {
+        processPromise = processRunnerCommand({ runId, command });
+      } else {
+        core.error(`Unknown command type for command ${command.id}: ${JSON.stringify(command)}`);
+        processPromise = Promise.resolve({
+          error: true,
+          commandId: command.id,
+          reason: `Unknown command type: ${JSON.stringify(command)}`,
+        });
+      }
+
+      // Add individual catch blocks to prevent Promise.allSettled from hiding specific errors
+      // and to count errors accurately.
+      return processPromise.catch((error) => {
+        core.warning(
+          `Error processing command ${command.id} (type: ${command.command.type}) in chunk ${chunkNumber}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        totalErrorCount++;
+        // Return an indicator of failure for this specific command
+        return { error: true, commandId: command.id, reason: String(error) };
+      });
+    });
 
     // Wait for all promises in the current chunk to settle (either finish or fail)
     const results = await Promise.allSettled(chunkPromises);
@@ -79,7 +148,7 @@ export async function processCommandsWithConcurrency({
   }
 }
 
-export async function processCommand({
+export async function processFileCommand({
   command,
   runId,
   scripts,
@@ -279,11 +348,12 @@ File: ${fullFilePath}
     file: relativeFilePath,
   });
 
-  return await executeScript({
+  return (await executeScript({
     script: processedLintScript,
     cwd: baseDir,
-    commandType: "Lint",
-  });
+    commandName: "Lint",
+    commandType: CommandType.FILE,
+  })) as IBaseFileCommandResult;
 }
 
 async function handleLintReadAction(
@@ -368,11 +438,12 @@ Test file path: ${testFilePath}
 Original file path: ${origFilePath}
 `);
 
-  const result = await executeScript({
+  const result = (await executeScript({
     script: processedTestScript,
     cwd: baseDir,
-    commandType: "Test",
-  });
+    commandName: "Test",
+    commandType: CommandType.FILE,
+  })) as IBaseFileCommandResult;
 
   core.info(`
 [test-result]
@@ -419,25 +490,28 @@ ${coverageScript}
     testFilePaths,
   });
 
-  return await executeScript({
+  return (await executeScript({
     script: processedCoverageScript,
     cwd: baseDir,
-    commandType: "Coverage",
-  });
+    commandName: "Coverage",
+    commandType: CommandType.FILE,
+  })) as IBaseFileCommandResult;
 }
 
 async function executeScript({
   script,
   cwd,
+  commandName,
   commandType,
 }: {
   script: string;
   cwd: string;
-  commandType: string;
-}): Promise<IBaseFileCommandResult> {
-  core.info(`Executing ${commandType.toLowerCase()} script in ${cwd}: ${script}`);
+  commandName: string;
+  commandType: CommandType;
+}): Promise<IBaseFileCommandResult | IScriptRunnerCommandResult> {
+  core.info(`Executing ${commandName.toLowerCase()} script in ${cwd}: ${script}`);
 
-  return new Promise<IBaseFileCommandResult>((resolve) => {
+  return new Promise<IBaseFileCommandResult | IScriptRunnerCommandResult>((resolve) => {
     const timeoutDuration = 5 * 60 * 1000; // 5 minute timeout
     const maxBufferSize = 10 * 1024 * 1024; // 10 MB buffer
 
@@ -447,45 +521,59 @@ async function executeScript({
       (error, stdout, stderr) => {
         const exitCode = error ? (error.code ?? 1) : 0;
         core.info(
-          `>>> [exec-callback entry] ${commandType} command finished processing. Script: ${script}`,
+          `>>> [exec-callback entry] ${commandName} command finished processing. Script: ${script}`,
         );
-        if (stdout) core.info(`[exec-callback] ${commandType} stdout: ${stdout}`);
-        if (stderr) core.warning(`[exec-callback] ${commandType} stderr: ${stderr}`);
+        if (stdout) core.info(`[exec-callback] ${commandName} stdout: ${stdout}`);
+        if (stderr) core.warning(`[exec-callback] ${commandName} stderr: ${stderr}`);
         if (error) {
           if (error.signal === "SIGTERM" || (error as any).killed) {
             core.warning(
-              `[exec-callback] ${commandType} command timed out or was killed. Timeout: ${timeoutDuration / 1000}s.`,
+              `[exec-callback] ${commandName} command timed out or was killed. Timeout: ${timeoutDuration / 1000}s.`,
             );
             error.message = `Command timed out or killed (signal: ${error.signal}): ${error.message}`;
           } else {
-            core.warning(`[exec-callback] ${commandType} error: ${error.message}`);
+            core.warning(`[exec-callback] ${commandName} error: ${error.message}`);
           }
         }
-        core.info(`[exec-callback] ${commandType} command exited with code ${exitCode}`);
-        resolve({
+        core.info(`[exec-callback] ${commandName} command exited with code ${exitCode}`);
+
+        const baseResultObject = {
           stdout,
           stderr,
           exitCode,
-          type: CommandType.FILE,
           error: error ? error.message : undefined,
           completedAt: Date.now(),
-        });
+        };
+
+        if (commandType === CommandType.FILE) {
+          const fileResult: IBaseFileCommandResult = {
+            ...baseResultObject,
+            type: CommandType.FILE,
+          };
+          resolve(fileResult);
+        } else {
+          const runnerResult: IScriptRunnerCommandResult = {
+            ...baseResultObject,
+            type: CommandType.RUNNER,
+          };
+          resolve(runnerResult);
+        }
       },
     );
 
     // Log when the process exits/closes, separate from the callback
     child.on("exit", (code, signal) => {
       core.info(
-        `>>> [exec-exit event] ${commandType} process exited. Code: ${code}, Signal: ${signal}`,
+        `>>> [exec-exit event] ${commandName} process exited. Code: ${code}, Signal: ${signal}`,
       );
     });
     child.on("close", () => {
-      core.info(`>>> [exec-close event] ${commandType} process streams closed.`);
+      core.info(`>>> [exec-close event] ${commandName} process streams closed.`);
     });
     child.on("error", (err) => {
       // This event fires for errors like command not found, ENOENT, etc.
       core.warning(
-        `>>> [exec-process error event] ${commandType} child process error: ${err.message}`,
+        `>>> [exec-process error event] ${commandName} child process error: ${err.message}`,
       );
       // Resolve here might be problematic if the main callback *also* fires.
       // The main callback should handle most errors, including non-zero exit codes.

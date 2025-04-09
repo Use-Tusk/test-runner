@@ -81,11 +81,9 @@ async function run() {
             break;
           }
 
-          const fileCommands = commands.filter((cmd) => cmd.command.type == CommandType.FILE);
-
           // Start processing in the background, do not await here to keep polling loop active
           processCommandsWithConcurrency({
-            commands: fileCommands,
+            commands,
             runId,
             scripts,
           }).catch((error) => {
