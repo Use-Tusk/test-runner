@@ -314,6 +314,8 @@ ${fileContents}
   };
 }
 
+const LINT_SCRIPT_MISSING_MESSAGE = "Lint script missing or invalid, skipping lint action.";
+
 async function handleLintAction(
   scripts: ScriptData,
   data: IFileCommandData,
@@ -329,7 +331,7 @@ async function handleLintAction(
     core.warning("Lint script is missing. Skipping lint action.");
     return {
       stdout: "",
-      stderr: "Lint script missing or invalid, skipping lint action.",
+      stderr: LINT_SCRIPT_MISSING_MESSAGE,
       exitCode: 0,
       type: CommandType.FILE,
       completedAt: Date.now(),
@@ -369,8 +371,20 @@ async function handleLintReadAction(
     };
   }
 
-  const readResult = await handleReadAction(data);
-  return readResult;
+  if (lintResult.stderr === LINT_SCRIPT_MISSING_MESSAGE) {
+    return {
+      ...lintResult,
+      fileContents: "",
+    };
+  }
+
+  const { fileContents } = await handleReadAction(data);
+
+  // Use the lint command's results
+  return {
+    ...lintResult,
+    fileContents,
+  };
 }
 
 async function handleWriteLintReadAction(
