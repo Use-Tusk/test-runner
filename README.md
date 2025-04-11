@@ -139,7 +139,7 @@ The test runner step takes as input these parameters:
       <td><code>testScript</code></td>
       <td>Command to execute to run tests in a file. Use <code>{{file}}</code> as a placeholder.</td>
       <td><code>pytest {{file}}</code></td>
-      <td>Required</td>
+      <td><b>Required.</b></td>
     </tr>
     <tr>
       <td><code>coverageScript</code></td>
