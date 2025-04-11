@@ -19,6 +19,15 @@ inputs:
   authToken:
     description: "Tusk server authentication token"
     required: true
+  appDir:
+    description: "App directory for the service, if there are multiple services in the repo"
+    required: false
+  testFramework:
+    description: "Test framework used for the service"
+    required: true
+  testFileRegex:
+    description: "Regex to match test files in the service"
+    required: true
   testScript:
     description: "Test script to run"
     required: true
