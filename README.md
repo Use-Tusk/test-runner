@@ -59,7 +59,7 @@ jobs:
 
       - name: Start runner
         id: test-action
-        uses: UseTusk/test-runner@v1
+        uses: Use-Tusk/test-runner@v1
         with:
           runId: ${{ github.event.inputs.runId }}
           tuskUrl: ${{ github.event.inputs.tuskUrl }}
