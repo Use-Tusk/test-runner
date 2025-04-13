@@ -125,9 +125,9 @@ The test runner step takes as input these parameters:
     </tr>
     <tr>
       <td><code>testFileRegex</code></td>
-      <td>Regex to match test file paths in your repo (or app directory).</td>
+      <td>Regex pattern to match test file paths in your repo (or app directory).</td>
       <td><code>^backend/tests/.*(test_.*|.*_test)\.py$</code></td>
-      <td><b>Required.</b> This is relative to the root of the repo (i.e., the <code>appDir</code> will be included in it, if applicable).</td>
+      <td><b>Required.</b> This is relative to the root of the repo (i.e., the <code>appDir</code> will be included in it, if applicable).<br><br>If your pattern includes backslashes (<code>\</code>) to escape certain characters, wrap your pattern in single quotes or omit quotes entirely.</td>
     </tr>
     <tr>
       <td><code>lintScript</code></td>
