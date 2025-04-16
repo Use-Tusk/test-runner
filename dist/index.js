@@ -55836,7 +55836,7 @@ const {
 
 const serverUrl = coreExports.getInput("tuskUrl", { required: true }).replace(/\/$/, "");
 const authToken = coreExports.getInput("authToken", { required: true });
-const timeoutMs = 5_000;
+const timeoutMs = 10_000;
 const headers = {
     Authorization: `Bearer ${authToken}`,
     "Content-Type": "application/json",
@@ -55844,29 +55844,48 @@ const headers = {
 async function withRetry(requestFn, maxRetries = 3) {
     let lastError = null;
     const retryableStatusCodes = [500, 502, 503, 504];
+    const retryableErrorCodes = ["ECONNABORTED", "ECONNRESET", "EAI_AGAIN"];
+    const retryableErrorMessages = ["canceled"];
     for (let attempt = 0; attempt < maxRetries + 1; attempt++) {
         try {
             return await requestFn();
         }
         catch (error) {
             lastError = error;
-            // Check if it's a 503 error that we should retry
+            let shouldRetry = false;
+            let reason = "";
+            // Check for retryable status codes
             if (axios.isAxiosError(error) &&
                 error.response?.status &&
                 retryableStatusCodes.includes(error.response.status)) {
-                if (attempt < maxRetries) {
-                    const delayMs = 2 ** attempt * 1000; // Exponential backoff: 1s, 2s, 4s
-                    coreExports.info(`[pollCommands][${new Date().toISOString()}] Received 503 error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
-                    await new Promise((resolve) => setTimeout(resolve, delayMs));
-                    continue;
-                }
+                shouldRetry = true;
+                reason = `status code ${error.response.status}`;
+            }
+            // Check for retryable error codes
+            else if (axios.isAxiosError(error) &&
+                error.code &&
+                retryableErrorCodes.includes(error.code)) {
+                shouldRetry = true;
+                reason = `error code ${error.code}`;
+            }
+            // Check for retryable error messages (e.g., AbortSignal timeout)
+            else if (error instanceof Error && retryableErrorMessages.includes(error.message)) {
+                shouldRetry = true;
+                reason = `error message "${error.message}"`;
+            }
+            if (shouldRetry && attempt < maxRetries) {
+                const delayMs = 2 ** attempt * 1000; // Exponential backoff: 1s, 2s, 4s
+                coreExports.info(`[withRetry][${new Date().toISOString()}] Request failed with ${reason}, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`);
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+                continue;
             }
             // For non-retryable errors or if we've exhausted retries, throw the error
             throw error;
         }
     }
-    // This should never happen, but TypeScript needs it
-    throw lastError;
+    // This line should technically be unreachable due to the loop structure and the final throw
+    // But it satisfies TypeScript's need for a return path if the loop somehow completes without returning/throwing
+    throw lastError || new Error("Retry mechanism failed unexpectedly.");
 }
 const pollCommands = async ({ runId, runnerMetadata, }) => {
     const response = await axios.get(`${serverUrl}/poll-commands`, {
@@ -55874,8 +55893,7 @@ const pollCommands = async ({ runId, runnerMetadata, }) => {
             runId,
             runnerMetadata,
         },
-        timeout: timeoutMs,
-        signal: AbortSignal.timeout(5_000),
+        signal: AbortSignal.timeout(timeoutMs),
         headers,
     });
     return response.data.commands;
@@ -55887,8 +55905,7 @@ const ackCommand = async ({ runId, commandId }) => {
             commandId,
         }, {
             headers,
-            timeout: timeoutMs,
-            signal: AbortSignal.timeout(5_000),
+            signal: AbortSignal.timeout(timeoutMs),
         });
         if (response.status === 200) {
             coreExports.info(`[ackCommand][${new Date().toISOString()}] Successfully acked command ${commandId}`);
@@ -55905,8 +55922,7 @@ const sendCommandResult = async ({ runId, result, }) => {
             result,
         }, {
             headers,
-            timeout: timeoutMs,
-            signal: AbortSignal.timeout(5_000),
+            signal: AbortSignal.timeout(timeoutMs),
         });
         if (response.status === 200) {
             coreExports.info(`[sendCommandResult][${new Date().toISOString()}] Successfully sent result for command ${result.id}`);
