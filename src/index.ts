@@ -25,14 +25,6 @@ async function run() {
     const pollingDuration = parseInt(core.getInput("pollingDuration") || "1800", 10); // Default 30 minutes
     const pollingInterval = parseInt(core.getInput("pollingInterval") || "5", 10); // Default 5 seconds
 
-    // Get GitHub context
-    // Full list: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#default-environment-variables
-    const runnerMetadata = {
-      githubRepo: process.env.GITHUB_REPOSITORY,
-      githubRef: process.env.GITHUB_REF,
-      commitSha,
-    };
-
     // Start polling for commands
     const startTime = Date.now();
     const endTime = startTime + pollingDuration * 1000;
@@ -47,10 +39,7 @@ async function run() {
           `Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`,
         );
 
-        const commands = await pollCommands({
-          runId,
-          runnerMetadata,
-        });
+        const commands = await pollCommands({ runId });
 
         consecutiveErrorCount = 0;
 

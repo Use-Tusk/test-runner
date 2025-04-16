@@ -11,6 +11,17 @@ const headers = {
   "Content-Type": "application/json",
 };
 
+// Send GitHub runner context to the server for every request
+// Full list: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#default-environment-variables
+const runnerMetadata = {
+  githubRepo: process.env.GITHUB_REPOSITORY,
+  githubRef: process.env.GITHUB_REF,
+  githubRunId: process.env.GITHUB_RUN_ID, // Workflow run ID. This number does not change if you re-run the workflow run.
+  githubSha: process.env.GITHUB_SHA, // Last commit on the GITHUB_REF (branch or tag that received dispatch)
+  githubActor: process.env.GITHUB_ACTOR,
+  githubRunAttempt: process.env.GITHUB_RUN_ATTEMPT,
+};
+
 async function withRetry<T>(requestFn: () => Promise<T>, maxRetries = 3): Promise<T> {
   let lastError: Error | null = null;
   const retryableStatusCodes = [500, 502, 503, 504];
@@ -70,13 +81,7 @@ async function withRetry<T>(requestFn: () => Promise<T>, maxRetries = 3): Promis
   throw lastError || new Error("Retry mechanism failed unexpectedly.");
 }
 
-export const pollCommands = async ({
-  runId,
-  runnerMetadata,
-}: {
-  runId: string;
-  runnerMetadata: Record<string, string | undefined>;
-}): Promise<IActionCommand[]> => {
+export const pollCommands = async ({ runId }: { runId: string }): Promise<IActionCommand[]> => {
   const response = await axios.get(`${serverUrl}/poll-commands`, {
     params: {
       runId,
@@ -96,6 +101,7 @@ export const ackCommand = async ({ runId, commandId }: { runId: string; commandI
       {
         runId,
         commandId,
+        runnerMetadata,
       },
       {
         headers,
@@ -128,6 +134,7 @@ export const sendCommandResult = async ({
       {
         runId,
         result,
+        runnerMetadata,
       },
       {
         headers,

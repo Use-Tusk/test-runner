@@ -55841,6 +55841,16 @@ const headers = {
     Authorization: `Bearer ${authToken}`,
     "Content-Type": "application/json",
 };
+// Send GitHub runner context to the server for every request
+// Full list: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#default-environment-variables
+const runnerMetadata = {
+    githubRepo: process.env.GITHUB_REPOSITORY,
+    githubRef: process.env.GITHUB_REF,
+    githubRunId: process.env.GITHUB_RUN_ID, // Workflow run ID. This number does not change if you re-run the workflow run.
+    githubSha: process.env.GITHUB_SHA, // Last commit on the GITHUB_REF (branch or tag that received dispatch)
+    githubActor: process.env.GITHUB_ACTOR,
+    githubRunAttempt: process.env.GITHUB_RUN_ATTEMPT,
+};
 async function withRetry(requestFn, maxRetries = 3) {
     let lastError = null;
     const retryableStatusCodes = [500, 502, 503, 504];
@@ -55887,7 +55897,7 @@ async function withRetry(requestFn, maxRetries = 3) {
     // But it satisfies TypeScript's need for a return path if the loop somehow completes without returning/throwing
     throw lastError || new Error("Retry mechanism failed unexpectedly.");
 }
-const pollCommands = async ({ runId, runnerMetadata, }) => {
+const pollCommands = async ({ runId }) => {
     const response = await axios.get(`${serverUrl}/poll-commands`, {
         params: {
             runId,
@@ -55903,6 +55913,7 @@ const ackCommand = async ({ runId, commandId }) => {
         const response = await axios.post(`${serverUrl}/ack-command`, {
             runId,
             commandId,
+            runnerMetadata,
         }, {
             headers,
             signal: AbortSignal.timeout(timeoutMs),
@@ -55920,6 +55931,7 @@ const sendCommandResult = async ({ runId, result, }) => {
         const response = await axios.post(`${serverUrl}/command-result`, {
             runId,
             result,
+            runnerMetadata,
         }, {
             headers,
             signal: AbortSignal.timeout(timeoutMs),
@@ -56375,13 +56387,6 @@ async function run() {
         };
         const pollingDuration = parseInt(coreExports.getInput("pollingDuration") || "1800", 10); // Default 30 minutes
         const pollingInterval = parseInt(coreExports.getInput("pollingInterval") || "5", 10); // Default 5 seconds
-        // Get GitHub context
-        // Full list: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#default-environment-variables
-        const runnerMetadata = {
-            githubRepo: process.env.GITHUB_REPOSITORY,
-            githubRef: process.env.GITHUB_REF,
-            commitSha,
-        };
         // Start polling for commands
         const startTime = Date.now();
         const endTime = startTime + pollingDuration * 1000;
@@ -56391,10 +56396,7 @@ async function run() {
         while (Date.now() < endTime) {
             try {
                 coreExports.info(`Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`);
-                const commands = await pollCommands({
-                    runId,
-                    runnerMetadata,
-                });
+                const commands = await pollCommands({ runId });
                 consecutiveErrorCount = 0;
                 if (commands.length > 0) {
                     coreExports.info(`Received ${commands.length} commands from server`);
