@@ -55848,8 +55848,9 @@ const runnerMetadata = {
     githubRef: process.env.GITHUB_REF,
     githubRunId: process.env.GITHUB_RUN_ID, // Workflow run ID. This number does not change if you re-run the workflow run.
     githubSha: process.env.GITHUB_SHA, // Last commit on the GITHUB_REF (branch or tag that received dispatch)
-    githubActor: process.env.GITHUB_ACTOR,
+    githubTriggeringActor: process.env.GITHUB_TRIGGERING_ACTOR,
     githubRunAttempt: process.env.GITHUB_RUN_ATTEMPT,
+    githubWorkflowRef: process.env.GITHUB_WORKFLOW_REF,
 };
 async function withRetry(requestFn, maxRetries = 3) {
     let lastError = null;
