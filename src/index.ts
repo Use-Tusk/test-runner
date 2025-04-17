@@ -2,7 +2,7 @@ import * as core from "@actions/core";
 import { CommandType, RunnerAction, ScriptData } from "./types.js";
 import { processCommands } from "./handleCommands.js";
 import { ackCommand, pollCommands } from "./requests.js";
-import { limiter, getLimiterStats } from "./limiter.js";
+import { limiter } from "./limiter.js";
 
 async function run() {
   core.info("Starting runner...");
@@ -50,7 +50,7 @@ async function run() {
           `Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`,
         );
 
-        core.info(`Current command queue stats: ${JSON.stringify(await getLimiterStats(limiter))}`);
+        core.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
 
         const commands = await pollCommands({ runId });
 

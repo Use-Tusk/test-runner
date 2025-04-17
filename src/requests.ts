@@ -1,6 +1,6 @@
 import axios from "axios";
 import * as core from "@actions/core";
-import { IActionCommand, IActionCommandResult } from "./types.js";
+import { IActionCommand, IActionCommandResult, ITestExecutionConfig } from "./types.js";
 
 const serverUrl = core.getInput("tuskUrl", { required: true }).replace(/\/$/, "");
 const authToken = core.getInput("authToken", { required: true });
@@ -151,6 +151,38 @@ export const sendCommandResult = async ({
       core.warning(
         `[sendCommandResult][${new Date().toISOString()}] Failed to send result for command ${result.id}, server is probably not running. Server response: ${response.data}`,
       );
+    }
+  });
+};
+
+export const getTestExecutionConfig = async ({
+  runId,
+}: {
+  runId: string;
+}): Promise<ITestExecutionConfig | null> => {
+  return withRetry(async () => {
+    const response = await axios.get(`${serverUrl}/test-execution-config`, {
+      params: {
+        runId,
+        runnerMetadata,
+      },
+      headers,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (response.status === 200) {
+      core.info(
+        `[getTestExecutionConfig][${new Date().toISOString()}] Successfully fetched test execution config`,
+      );
+
+      const testExecutionConfig = response.data.testExecutionConfig as ITestExecutionConfig;
+      return testExecutionConfig;
+    } else {
+      core.warning(
+        `[getTestExecutionConfig][${new Date().toISOString()}] Failed to fetch test execution config. Server response: ${response.data}`,
+      );
+
+      return null;
     }
   });
 };

@@ -55945,6 +55945,27 @@ const sendCommandResult = async ({ runId, result, }) => {
         }
     });
 };
+const getTestExecutionConfig = async ({ runId, }) => {
+    return withRetry(async () => {
+        const response = await axios.get(`${serverUrl}/test-execution-config`, {
+            params: {
+                runId,
+                runnerMetadata,
+            },
+            headers,
+            signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (response.status === 200) {
+            coreExports.info(`[getTestExecutionConfig][${new Date().toISOString()}] Successfully fetched test execution config`);
+            const testExecutionConfig = response.data.testExecutionConfig;
+            return testExecutionConfig;
+        }
+        else {
+            coreExports.warning(`[getTestExecutionConfig][${new Date().toISOString()}] Failed to fetch test execution config. Server response: ${response.data}`);
+            return null;
+        }
+    });
+};
 
 class ActionError extends Error {
     constructor(message) {
@@ -58885,17 +58906,38 @@ function requireLib () {
 var libExports = requireLib();
 var Bottleneck = /*@__PURE__*/getDefaultExportFromCjs(libExports);
 
-// TODO: Also fetch maxConcurrency from test execution config
-const maxConcurrency = parseInt(coreExports.getInput("maxConcurrency") || "5", 10);
+const runId = coreExports.getInput("runId", { required: true });
+const serverTestExecutionConfig = await getTestExecutionConfig({ runId });
+const serverConfigMaxConcurrency = serverTestExecutionConfig?.maxConcurrency;
+const stepInputMaxConcurrencyStr = coreExports.getInput("maxConcurrency");
+const DEFAULT_MAX_CONCURRENCY = 5;
+let maxConcurrency;
+let source;
+if (serverConfigMaxConcurrency && serverConfigMaxConcurrency > 0) {
+    maxConcurrency = serverConfigMaxConcurrency;
+    source = "server config";
+}
+else if (stepInputMaxConcurrencyStr) {
+    const parsedInput = parseInt(stepInputMaxConcurrencyStr, 10);
+    if (!isNaN(parsedInput) && parsedInput > 0) {
+        maxConcurrency = parsedInput;
+        source = "step input 'maxConcurrency'";
+    }
+    else {
+        maxConcurrency = DEFAULT_MAX_CONCURRENCY;
+        source = "default (invalid step input)";
+        coreExports.warning(`Invalid value provided for 'maxConcurrency' input: "${stepInputMaxConcurrencyStr}". Using default value: ${maxConcurrency}`);
+    }
+}
+else {
+    maxConcurrency = DEFAULT_MAX_CONCURRENCY;
+    source = "default";
+}
+coreExports.info(`Using max concurrency: ${maxConcurrency} (source: ${source})`);
 const limiter = new Bottleneck({
     maxConcurrent: maxConcurrency,
     trackDoneStatus: true,
 });
-async function getLimiterStats(limiter) {
-    return {
-        counts: limiter.counts(),
-    };
-}
 
 let totalErrorCount = 0;
 async function processRunnerCommand({ command, runId, }) {
@@ -59336,7 +59378,7 @@ async function run() {
             }
             try {
                 coreExports.info(`Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`);
-                coreExports.info(`Current command queue stats: ${JSON.stringify(await getLimiterStats(limiter))}`);
+                coreExports.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
                 const commands = await pollCommands({ runId });
                 consecutiveErrorCount = 0;
                 if (commands.length > 0) {

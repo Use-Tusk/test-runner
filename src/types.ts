@@ -103,3 +103,7 @@ export interface AbsolutePathData {
   filePath: string;
   originalFilePath?: string; // Only used in Go tests
 }
+
+export interface ITestExecutionConfig {
+  maxConcurrency?: number;
+}
