@@ -2,6 +2,7 @@ import * as core from "@actions/core";
 import { CommandType, RunnerAction, ScriptData } from "./types.js";
 import { processCommands } from "./handleCommands.js";
 import { ackCommand, pollCommands } from "./requests.js";
+import { limiter, getLimiterStats } from "./limiter.js";
 
 async function run() {
   core.info("Starting runner...");
@@ -49,6 +50,8 @@ async function run() {
           `Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`,
         );
 
+        core.info(`Current command queue stats: ${JSON.stringify(await getLimiterStats(limiter))}`);
+
         const commands = await pollCommands({ runId });
 
         consecutiveErrorCount = 0;
@@ -57,27 +60,25 @@ async function run() {
           core.info(`Received ${commands.length} commands from server`);
           lastCommandReceivedTime = Date.now();
 
+          const ackPromises = commands.map(async (cmd) => {
+            await ackCommand({ runId, commandId: cmd.id });
+          });
+          await Promise.allSettled(ackPromises);
+
           commands.forEach((cmd) => {
             core.info(`Command:\n${JSON.stringify(cmd, null, 2)}`);
           });
 
-          if (
-            commands.some(
-              (cmd) =>
-                cmd.command.type === CommandType.RUNNER &&
-                cmd.command.action === RunnerAction.TERMINATE,
-            )
-          ) {
-            await ackCommand({
-              runId,
-              commandId: commands.find(
-                (cmd) =>
-                  cmd.command.type === CommandType.RUNNER &&
-                  cmd.command.action === RunnerAction.TERMINATE,
-              )!.id,
-            });
+          const terminateCommand = commands.find(
+            (cmd) =>
+              cmd.command.type === CommandType.RUNNER &&
+              cmd.command.action === RunnerAction.TERMINATE,
+          );
 
-            core.info("Terminate command received, exiting...");
+          if (terminateCommand) {
+            core.info(
+              `Terminate command ${terminateCommand.id} received and acknowledged, exiting...`,
+            );
             break;
           }
 

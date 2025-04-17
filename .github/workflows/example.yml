@@ -34,3 +34,4 @@ jobs:
           testFramework: "pytest"
           testFileRegex: "^tests/.*(test_.*|.*_test).py$"
           testScript: "pytest {{file}}"
+          maxConcurrency: "1"

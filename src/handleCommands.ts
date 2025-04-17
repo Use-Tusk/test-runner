@@ -18,15 +18,9 @@ import { exec } from "child_process";
 import * as fs from "fs/promises";
 import * as path from "path";
 import Handlebars from "handlebars";
-import { ackCommand, sendCommandResult } from "./requests.js";
+import { sendCommandResult } from "./requests.js";
 import { ActionError } from "./errors.js";
-import Bottleneck from "bottleneck";
-
-const maxConcurrency = parseInt(core.getInput("maxConcurrency") || "5", 10);
-
-const limiter = new Bottleneck({
-  maxConcurrent: maxConcurrency,
-});
+import { limiter, maxConcurrency } from "./limiter.js";
 
 let totalErrorCount = 0;
 
@@ -44,8 +38,6 @@ async function processRunnerCommand({
 
   const data = commandData as IRunnerCommandData;
   const action = commandAction as RunnerAction;
-
-  await ackCommand({ runId, commandId });
 
   let result: IScriptRunnerCommandResult = {
     stdout: "",
@@ -163,8 +155,6 @@ export async function processFileCommand({
   // Filtered for file command type before passing into the function
   const data = commandData as IFileCommandData;
   const action = commandAction as FileAction;
-
-  await ackCommand({ runId, commandId });
 
   const { filePath: fullFilePath } = setupPaths(data);
 

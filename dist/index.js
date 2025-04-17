@@ -58885,16 +58885,23 @@ function requireLib () {
 var libExports = requireLib();
 var Bottleneck = /*@__PURE__*/getDefaultExportFromCjs(libExports);
 
+// TODO: Also fetch maxConcurrency from test execution config
 const maxConcurrency = parseInt(coreExports.getInput("maxConcurrency") || "5", 10);
 const limiter = new Bottleneck({
     maxConcurrent: maxConcurrency,
+    trackDoneStatus: true,
 });
+async function getLimiterStats(limiter) {
+    return {
+        counts: limiter.counts(),
+    };
+}
+
 let totalErrorCount = 0;
 async function processRunnerCommand({ command, runId, }) {
     const { id: commandId, command: { data: commandData, action: commandAction }, } = command;
     const data = commandData;
     const action = commandAction;
-    await ackCommand({ runId, commandId });
     let result = {
         stdout: "",
         stderr: "",
@@ -58971,7 +58978,6 @@ async function processFileCommand({ command, runId, scripts, }) {
     // Filtered for file command type before passing into the function
     const data = commandData;
     const action = commandAction;
-    await ackCommand({ runId, commandId });
     const { filePath: fullFilePath } = setupPaths(data);
     // Ensure directory exists
     await fs.mkdir(path.dirname(fullFilePath), { recursive: true });
@@ -59330,22 +59336,23 @@ async function run() {
             }
             try {
                 coreExports.info(`Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`);
+                coreExports.info(`Current command queue stats: ${JSON.stringify(await getLimiterStats(limiter))}`);
                 const commands = await pollCommands({ runId });
                 consecutiveErrorCount = 0;
                 if (commands.length > 0) {
                     coreExports.info(`Received ${commands.length} commands from server`);
                     lastCommandReceivedTime = Date.now();
+                    const ackPromises = commands.map(async (cmd) => {
+                        await ackCommand({ runId, commandId: cmd.id });
+                    });
+                    await Promise.allSettled(ackPromises);
                     commands.forEach((cmd) => {
                         coreExports.info(`Command:\n${JSON.stringify(cmd, null, 2)}`);
                     });
-                    if (commands.some((cmd) => cmd.command.type === CommandType.RUNNER &&
-                        cmd.command.action === RunnerAction.TERMINATE)) {
-                        await ackCommand({
-                            runId,
-                            commandId: commands.find((cmd) => cmd.command.type === CommandType.RUNNER &&
-                                cmd.command.action === RunnerAction.TERMINATE).id,
-                        });
-                        coreExports.info("Terminate command received, exiting...");
+                    const terminateCommand = commands.find((cmd) => cmd.command.type === CommandType.RUNNER &&
+                        cmd.command.action === RunnerAction.TERMINATE);
+                    if (terminateCommand) {
+                        coreExports.info(`Terminate command ${terminateCommand.id} received and acknowledged, exiting...`);
                         break;
                     }
                     // Start processing in the background, do not await here to keep polling loop active
