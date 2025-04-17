@@ -20,6 +20,15 @@ import * as path from "path";
 import Handlebars from "handlebars";
 import { ackCommand, sendCommandResult } from "./requests.js";
 import { ActionError } from "./errors.js";
+import Bottleneck from "bottleneck";
+
+const maxConcurrency = parseInt(core.getInput("maxConcurrency") || "5", 10);
+
+const limiter = new Bottleneck({
+  maxConcurrent: maxConcurrency,
+});
+
+let totalErrorCount = 0;
 
 async function processRunnerCommand({
   command,
@@ -73,79 +82,68 @@ async function processRunnerCommand({
   });
 }
 
-export async function processCommandsWithConcurrency({
+export async function processCommands({
   commands,
   runId,
   scripts,
-  limit = 5,
 }: {
   commands: IActionCommand[];
   runId: string;
   scripts: ScriptData;
-  limit?: number;
 }): Promise<void> {
   core.info(
-    `Processing ${commands.length} commands in background with concurrency limit ${limit}...`,
+    `Processing ${commands.length} commands in background with concurrency limit ${maxConcurrency}...`,
   );
-  let processedCount = 0;
-  let totalErrorCount = 0;
 
-  for (let i = 0; i < commands.length; i += limit) {
-    const chunk = commands.slice(i, i + limit);
-    const chunkNumber = Math.floor(i / limit) + 1;
-    const totalChunks = Math.ceil(commands.length / limit);
-    core.info(`Processing command chunk ${chunkNumber}/${totalChunks} (size: ${chunk.length})`);
+  let preSchedulingErrors = 0;
+  let schedulingErrors = 0;
 
-    const chunkPromises = chunk.map((command) => {
-      let processPromise: Promise<void | { error: boolean; commandId: string; reason: string }>;
+  const commandPromises = commands.map((command) => {
+    let processFn: () => Promise<void | { error: boolean; commandId: string; reason: string }>;
 
-      if (command.command.type === CommandType.FILE) {
-        processPromise = processFileCommand({ runId, command, scripts });
-      } else if (command.command.type === CommandType.RUNNER) {
-        processPromise = processRunnerCommand({ runId, command });
-      } else {
-        core.error(`Unknown command type for command ${command.id}: ${JSON.stringify(command)}`);
-        processPromise = Promise.resolve({
-          error: true,
-          commandId: command.id,
-          reason: `Unknown command type: ${JSON.stringify(command)}`,
-        });
-      }
-
-      // Add individual catch blocks to prevent Promise.allSettled from hiding specific errors
-      // and to count errors accurately.
-      return processPromise.catch((error) => {
-        core.warning(
-          `Error processing command ${command.id} (type: ${command.command.type}) in chunk ${chunkNumber}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        totalErrorCount++;
-        // Return an indicator of failure for this specific command
-        return { error: true, commandId: command.id, reason: String(error) };
+    if (command.command.type === CommandType.FILE) {
+      processFn = () => processFileCommand({ runId, command, scripts });
+    } else if (command.command.type === CommandType.RUNNER) {
+      processFn = () => processRunnerCommand({ runId, command });
+    } else {
+      core.error(`Unknown command type for command ${command.id}: ${JSON.stringify(command)}`);
+      preSchedulingErrors++;
+      totalErrorCount++;
+      // Immediately resolve with an error for unknown types, don't schedule
+      return Promise.resolve({
+        error: true,
+        commandId: command.id,
+        reason: `Unknown command type: ${JSON.stringify(command)}`,
       });
+    }
+
+    return limiter.schedule(processFn).catch((error) => {
+      // This catch handles errors during the actual execution of processFn
+      core.warning(
+        `Error executing command ${command.id} (type: ${command.command.type}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      totalErrorCount++;
+      return { error: true, commandId: command.id, reason: String(error) };
     });
+  });
 
-    // Wait for all promises in the current chunk to settle (either finish or fail)
-    const results = await Promise.allSettled(chunkPromises);
+  const results = await Promise.allSettled(commandPromises);
 
-    // Log chunk completion (optional: could analyze results further)
-    const chunkErrors = results.filter(
-      (r) => r.status === "rejected" || (r.status === "fulfilled" && r.value?.error),
-    ).length;
-    processedCount += chunk.length;
-    core.info(
-      `Finished processing chunk ${chunkNumber}. Total processed: ${processedCount}/${commands.length}. Errors in this chunk: ${chunkErrors}`,
+  // Check results for any additional issues during scheduling/setup phase - should be rare
+  // (e.g., if the .catch handler itself failed, or limiter.schedule rejected unexpectedly)
+  const schedulingIssues = results.filter((r) => r.status === "rejected").length;
+
+  if (schedulingIssues > 0) {
+    core.warning(
+      `Encountered ${schedulingIssues} unexpected issues during command scheduling/setup.`,
     );
+    schedulingErrors += schedulingIssues;
+    totalErrorCount += schedulingIssues;
   }
 
   core.info(
-    `Finished background processing all ${commands.length} commands. Total errors encountered: ${totalErrorCount}.`,
+    `Finished scheduling ${commands.length} commands. Pre-scheduling errors: ${preSchedulingErrors}. Scheduling errors: ${schedulingErrors}. Current total errors: ${totalErrorCount}`,
   );
-  if (totalErrorCount > 0) {
-    // Indicate overall issues if any command failed.
-    core.warning(`Encountered ${totalErrorCount} errors during background command processing.`);
-    // Depending on requirements, you might want to throw an error here
-    // to be caught by the final .catch, but that might be too noisy.
-  }
 }
 
 export async function processFileCommand({

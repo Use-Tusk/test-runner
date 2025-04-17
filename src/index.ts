@@ -1,6 +1,6 @@
 import * as core from "@actions/core";
 import { CommandType, RunnerAction, ScriptData } from "./types.js";
-import { processCommandsWithConcurrency } from "./handleCommands.js";
+import { processCommands } from "./handleCommands.js";
 import { ackCommand, pollCommands } from "./requests.js";
 
 async function run() {
@@ -22,18 +22,28 @@ async function run() {
       coverage: coverageScript,
     };
 
-    const pollingDuration = parseInt(core.getInput("pollingDuration") || "1800", 10); // Default 30 minutes
+    const pollingDuration = parseInt(core.getInput("pollingDuration") || "3600", 10); // Default 60 minutes
     const pollingInterval = parseInt(core.getInput("pollingInterval") || "5", 10); // Default 5 seconds
+    const inactivityTimeoutSeconds = 10 * 60; // 10 minutes
 
     // Start polling for commands
     const startTime = Date.now();
     const endTime = startTime + pollingDuration * 1000;
+    let lastCommandReceivedTime = startTime;
 
     // Counter for consecutive polling errors
     const MAX_CONSECUTIVE_ERRORS = 5;
     let consecutiveErrorCount = 0;
 
     while (Date.now() < endTime) {
+      // Check for inactivity timeout
+      if (Date.now() - lastCommandReceivedTime > inactivityTimeoutSeconds * 1000) {
+        core.info(
+          `No commands received for ${inactivityTimeoutSeconds} seconds. Exiting polling loop.`,
+        );
+        break;
+      }
+
       try {
         core.info(
           `Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`,
@@ -45,6 +55,7 @@ async function run() {
 
         if (commands.length > 0) {
           core.info(`Received ${commands.length} commands from server`);
+          lastCommandReceivedTime = Date.now();
 
           commands.forEach((cmd) => {
             core.info(`Command:\n${JSON.stringify(cmd, null, 2)}`);
@@ -71,7 +82,7 @@ async function run() {
           }
 
           // Start processing in the background, do not await here to keep polling loop active
-          processCommandsWithConcurrency({
+          processCommands({
             commands,
             runId,
             scripts,
