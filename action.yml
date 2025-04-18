@@ -48,7 +48,6 @@ inputs:
   maxConcurrency:
     description: "Maximum number of commands to run concurrently"
     required: false
-    default: "5"
 
 runs:
   using: node20

@@ -58907,29 +58907,44 @@ var libExports = requireLib();
 var Bottleneck = /*@__PURE__*/getDefaultExportFromCjs(libExports);
 
 const runId = coreExports.getInput("runId", { required: true });
-const serverTestExecutionConfig = await getTestExecutionConfig({ runId });
-const serverConfigMaxConcurrency = serverTestExecutionConfig?.maxConcurrency;
+let serverConfigMaxConcurrency = undefined;
+try {
+    const serverTestExecutionConfig = await getTestExecutionConfig({ runId });
+    serverConfigMaxConcurrency = serverTestExecutionConfig?.maxConcurrency;
+}
+catch (error) {
+    coreExports.warning(`Failed to fetch test execution config.`);
+}
 const stepInputMaxConcurrencyStr = coreExports.getInput("maxConcurrency");
 const DEFAULT_MAX_CONCURRENCY = 5;
 let maxConcurrency;
 let source;
-if (serverConfigMaxConcurrency && serverConfigMaxConcurrency > 0) {
-    maxConcurrency = serverConfigMaxConcurrency;
-    source = "server config";
-}
-else if (stepInputMaxConcurrencyStr) {
+if (stepInputMaxConcurrencyStr) {
     const parsedInput = parseInt(stepInputMaxConcurrencyStr, 10);
     if (!isNaN(parsedInput) && parsedInput > 0) {
         maxConcurrency = parsedInput;
         source = "step input 'maxConcurrency'";
     }
     else {
-        maxConcurrency = DEFAULT_MAX_CONCURRENCY;
-        source = "default (invalid step input)";
-        coreExports.warning(`Invalid value provided for 'maxConcurrency' input: "${stepInputMaxConcurrencyStr}". Using default value: ${maxConcurrency}`);
+        // Invalid step input, fall through to check server config or default
+        coreExports.warning(`Invalid value provided for 'maxConcurrency' input: "${stepInputMaxConcurrencyStr}". Ignoring step input.`);
+        if (serverConfigMaxConcurrency && serverConfigMaxConcurrency > 0) {
+            maxConcurrency = serverConfigMaxConcurrency;
+            source = "server config";
+        }
+        else {
+            maxConcurrency = DEFAULT_MAX_CONCURRENCY;
+            source = "default (invalid step input)";
+        }
     }
 }
+else if (serverConfigMaxConcurrency && serverConfigMaxConcurrency > 0) {
+    // Step input not provided, use server config if available
+    maxConcurrency = serverConfigMaxConcurrency;
+    source = "server config";
+}
 else {
+    // Neither step input nor server config provided/valid, use default
     maxConcurrency = DEFAULT_MAX_CONCURRENCY;
     source = "default";
 }
