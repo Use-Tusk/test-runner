@@ -110,12 +110,12 @@ async function run() {
           if (axiosError.response && axiosError.response.status === 401) {
             const errorMessage = "Unauthorized. Verify that authToken is valid";
             core.setFailed(`Error: ${errorMessage}. Exiting...`);
-            break;
+            process.exit(1);
           }
 
           if (consecutiveErrorCount >= MAX_CONSECUTIVE_ERRORS) {
             core.setFailed("Max consecutive polling errors reached, exiting...");
-            break;
+            process.exit(1);
           }
 
           // Wait before retrying to avoid hammering the server
