@@ -106,6 +106,13 @@ async function run() {
             `Polling error: ${error} (consecutive errors: ${consecutiveErrorCount}/${MAX_CONSECUTIVE_ERRORS})`,
           );
 
+          const axiosError = error as any;
+          if (axiosError.response && axiosError.response.status === 401) {
+            const errorMessage = "Unauthorized. Verify that authToken is valid";
+            core.setFailed(`Error: ${errorMessage}. Exiting...`);
+            break;
+          }
+
           if (consecutiveErrorCount >= MAX_CONSECUTIVE_ERRORS) {
             core.setFailed("Max consecutive polling errors reached, exiting...");
             break;

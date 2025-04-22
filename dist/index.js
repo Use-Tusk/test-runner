@@ -59434,6 +59434,12 @@ async function run() {
                 else {
                     consecutiveErrorCount++;
                     coreExports.warning(`Polling error: ${error} (consecutive errors: ${consecutiveErrorCount}/${MAX_CONSECUTIVE_ERRORS})`);
+                    const axiosError = error;
+                    if (axiosError.response && axiosError.response.status === 401) {
+                        const errorMessage = "Unauthorized. Verify that authToken is valid";
+                        coreExports.setFailed(`Error: ${errorMessage}. Exiting...`);
+                        break;
+                    }
                     if (consecutiveErrorCount >= MAX_CONSECUTIVE_ERRORS) {
                         coreExports.setFailed("Max consecutive polling errors reached, exiting...");
                         break;
