@@ -108,8 +108,9 @@ async function run() {
 
           const axiosError = error as any;
           if (axiosError.response && axiosError.response.status === 401) {
-            const errorMessage = "Unauthorized. Verify that authToken is valid";
-            core.setFailed(`Error: ${errorMessage}. Exiting...`);
+            core.setFailed(
+              `Error: ${axiosError.response.data.error}. Verify that authToken is valid. Exiting...`,
+            );
             process.exit(1);
           }
 
