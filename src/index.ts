@@ -25,7 +25,7 @@ async function run() {
 
     const pollingDuration = parseInt(core.getInput("pollingDuration") || "3600", 10); // Default 60 minutes
     const pollingInterval = parseInt(core.getInput("pollingInterval") || "5", 10); // Default 5 seconds
-    const inactivityTimeoutSeconds = 10 * 60; // 10 minutes
+    const inactivityTimeoutSeconds = 20 * 60; // 20 minutes
 
     // Start polling for commands
     const startTime = Date.now();
@@ -40,14 +40,14 @@ async function run() {
       // Check for inactivity timeout
       if (Date.now() - lastCommandReceivedTime > inactivityTimeoutSeconds * 1000) {
         core.info(
-          `No commands received for ${inactivityTimeoutSeconds} seconds. Exiting polling loop.`,
+          `[${new Date().toISOString()}] No commands received for ${inactivityTimeoutSeconds} seconds. Exiting polling loop.`,
         );
         break;
       }
 
       try {
         core.info(
-          `Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`,
+          `[${new Date().toISOString()}] Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`,
         );
 
         core.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);

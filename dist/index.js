@@ -59377,7 +59377,7 @@ async function run() {
         };
         const pollingDuration = parseInt(coreExports.getInput("pollingDuration") || "3600", 10); // Default 60 minutes
         const pollingInterval = parseInt(coreExports.getInput("pollingInterval") || "5", 10); // Default 5 seconds
-        const inactivityTimeoutSeconds = 10 * 60; // 10 minutes
+        const inactivityTimeoutSeconds = 20 * 60; // 20 minutes
         // Start polling for commands
         const startTime = Date.now();
         const endTime = startTime + pollingDuration * 1000;
@@ -59388,11 +59388,11 @@ async function run() {
         while (Date.now() < endTime) {
             // Check for inactivity timeout
             if (Date.now() - lastCommandReceivedTime > inactivityTimeoutSeconds * 1000) {
-                coreExports.info(`No commands received for ${inactivityTimeoutSeconds} seconds. Exiting polling loop.`);
+                coreExports.info(`[${new Date().toISOString()}] No commands received for ${inactivityTimeoutSeconds} seconds. Exiting polling loop.`);
                 break;
             }
             try {
-                coreExports.info(`Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`);
+                coreExports.info(`[${new Date().toISOString()}] Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`);
                 coreExports.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
                 const commands = await pollCommands({ runId });
                 consecutiveErrorCount = 0;
