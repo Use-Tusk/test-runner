@@ -514,7 +514,11 @@ async function executeScript({
   core.info(`Executing ${commandName.toLowerCase()} script in ${cwd}: ${script}`);
 
   return new Promise<IBaseFileCommandResult | IScriptRunnerCommandResult>((resolve) => {
-    const timeoutDuration = 5 * 60 * 1000; // 5 minute timeout
+    let timeoutDuration = 5 * 60 * 1000; // 5 minute timeout
+    if (commandName === "Lint") {
+      timeoutDuration = 2 * 60 * 1000; // 2 minute timeout
+    }
+
     const maxBufferSize = 10 * 1024 * 1024; // 10 MB buffer
 
     const child = exec(
