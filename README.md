@@ -8,6 +8,7 @@
 
 <div align="center">
 
+[![docs](https://img.shields.io/badge/Docs-gray?style=plastic&logo=readthedocs&logoColor=white)](https://docs.usetusk.ai/automated-tests/self-serve)
 [![lint](https://github.com/Use-Tusk/test-runner/actions/workflows/linter.yml/badge.svg?branch=main&event=push)](https://github.com/Use-Tusk/test-runner/actions/workflows/linter.yml?query=branch%3Amain)
 [![build](https://github.com/Use-Tusk/test-runner/actions/workflows/codeql-analysis.yml/badge.svg?branch=main&event=push)](https://github.com/Use-Tusk/test-runner/actions/workflows/codeql-analysis.yml?query=branch%3Amain)
 [![X (formerly Twitter) URL](https://img.shields.io/twitter/url?url=https%3A%2F%2Fx.com%2Fusetusk&style=flat&logo=x&label=Tusk&color=BF40BF)](https://x.com/usetusk)
@@ -20,7 +21,10 @@ This GitHub Action facilitates running Tusk-generated tests on Github runners.
 
 ## Usage
 
-Log in to [Tusk](https://app.usetusk.ai/app) and auth your GitHub repo.
+Onboard to the Tusk platform:
+
+- Set your team up on Tusk [[docs](https://docs.usetusk.ai/automated-tests/onboarding)].
+- Configure and validate your test execution environment (including a workflow that uses this action) through the setup wizard [[docs](https://docs.usetusk.ai/automated-tests/self-serve)].
 
 When you push new commits, Tusk runs against your commit changes and generates tests. To ensure that test scenarios are meaningful and verified, Tusk will start this workflow and provision a runner (with a unique `runId`), using it as an ephemeral sandbox to run tests against your specific setup and dependencies. Essentially, this action polls for live commands emitted by Tusk based on the progress of the run, executes them, and sends the results back to Tusk for further processing.
 
