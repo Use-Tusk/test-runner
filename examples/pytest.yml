@@ -1,0 +1,48 @@
+# Example Tusk test runner workflow for service with:
+# - pytest unit tests
+# - linting with black
+# - single service (no appDir)
+# Adapt to your environment accordingly.
+
+name: Tusk Test Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      runId:
+        description: "Tusk Run ID"
+        required: true
+      tuskUrl:
+        description: "Tusk server URL"
+        required: true
+      commitSha:
+        description: "Commit SHA to checkout"
+        required: true
+
+jobs:
+  test-action:
+    name: Tusk Test Runner
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commitSha }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Start runner
+        id: test-action
+        uses: Use-Tusk/test-runner@v1
+        with:
+          runId: ${{ github.event.inputs.runId }}
+          tuskUrl: ${{ github.event.inputs.tuskUrl }}
+          commitSha: ${{ github.event.inputs.commitSha }}
+          authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
+          testFramework: "pytest"
+          testFileRegex: "^tests/.*(test_.*|.*_test).py$"
+          lintScript: black {{ file }}
+          testScript: pytest {{ file }}

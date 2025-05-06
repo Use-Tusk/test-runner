@@ -30,6 +30,13 @@ When you push new commits, Tusk runs against your commit changes and generates t
 
 Add the following workflow to your `.github/workflows` folder and adapt inputs accordingly. If your repo requires additional setup steps (e.g., installing dependencies, setting up a Postgres database, etc), add them before the `Start runner` step. If your repo is a monorepo with multiple services, each workflow corresponds to a service sub-directory when you set up Tusk.
 
+Workflow examples:
+
+- [Testing for a single-service repo](examples/pytest.yml)
+- [Testing for a particular service in a multi-service repo](examples/jest-with-app-dir.yml)
+- [Setting up auxiliary testing dependencies (e.g., Postgres DB, Redis)](examples/jest-with-service-dependencies.yml)
+- [Using external runners in workflows (e.g., Blacksmith)](examples/pytest-with-blacksmith.yml)
+
 ```yml
 name: Tusk Test Runner
 

@@ -1,0 +1,49 @@
+# Example Tusk test runner workflow for service with:
+# - Jest unit tests
+# - service in `backend/` (appDir is "backend")
+# Adapt to your environment accordingly.
+
+name: Tusk Test Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      runId:
+        description: "Tusk Run ID"
+        required: true
+      tuskUrl:
+        description: "Tusk server URL"
+        required: true
+      commitSha:
+        description: "Commit SHA to checkout"
+        required: true
+
+jobs:
+  test-action:
+    name: Tusk Test Runner
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commitSha }}
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./backend
+
+      - name: Start runner
+        id: test-action
+        uses: Use-Tusk/test-runner@v1
+        with:
+          runId: ${{ github.event.inputs.runId }}
+          tuskUrl: ${{ github.event.inputs.tuskUrl }}
+          commitSha: ${{ github.event.inputs.commitSha }}
+          authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
+          appDir: "backend"
+          testFramework: "jest"
+          testFileRegex: "^backend/src/tests/.*[._](test|spec).(js|jsx|ts|tsx)$"
+          lintScript: "npm run lint {{file}}"
+          testScript: "npm run test {{file}}"
