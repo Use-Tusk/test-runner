@@ -1,5 +1,5 @@
 import * as core from "@actions/core";
-import { CommandType, RunnerAction, ScriptData } from "./types.js";
+import { CommandType, IActionCommand, RunnerAction, ScriptData } from "./types.js";
 import { processCommands } from "./handleCommands.js";
 import { ackCommand, pollCommands } from "./requests.js";
 import { limiter } from "./limiter.js";
@@ -36,6 +36,9 @@ async function run() {
     const MAX_CONSECUTIVE_ERRORS = 5;
     let consecutiveErrorCount = 0;
 
+    const pendingAckCommands: Map<string, IActionCommand> = new Map();
+    const commandsSentToProcess = new Set<string>();
+
     while (Date.now() < endTime) {
       // Check for inactivity timeout
       if (Date.now() - lastCommandReceivedTime > inactivityTimeoutSeconds * 1000) {
@@ -52,49 +55,134 @@ async function run() {
 
         core.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
 
-        const commands = await pollCommands({ runId });
+        const polledCommands = await pollCommands({ runId });
 
         consecutiveErrorCount = 0;
 
-        if (commands.length > 0) {
-          core.info(`Received ${commands.length} commands from server`);
+        if (polledCommands.length > 0) {
+          core.info(`Received ${polledCommands.length} commands from server`);
           lastCommandReceivedTime = Date.now();
 
-          const ackPromises = commands.map(async (cmd) => {
-            await ackCommand({ runId, commandId: cmd.id });
-          });
-          await Promise.allSettled(ackPromises);
-
-          commands.forEach((cmd) => {
-            core.info(`Command:\n${JSON.stringify(cmd, null, 2)}`);
-          });
-
-          const terminateCommand = commands.find(
-            (cmd) =>
-              cmd.command.type === CommandType.RUNNER &&
-              cmd.command.action === RunnerAction.TERMINATE,
-          );
-
-          if (terminateCommand) {
-            core.info(
-              `Terminate command ${terminateCommand.id} received and acknowledged, exiting...`,
-            );
-            break;
+          for (const polledCmd of polledCommands) {
+            // If not acked yet and not already sent for processing, add to pendingAckCommands
+            if (!pendingAckCommands.has(polledCmd.id) && !commandsSentToProcess.has(polledCmd.id)) {
+              pendingAckCommands.set(polledCmd.id, polledCmd);
+              core.info(`New command ${polledCmd.id} added to pending acknowledgment queue.`);
+            } else if (pendingAckCommands.has(polledCmd.id)) {
+              // Already pending ack, will attempt ack again
+              core.info(
+                `Command ${polledCmd.id} re-polled, already pending acknowledgment. Will attempt ack again.`,
+              );
+            } else {
+              // Already in commandsSentToProcess
+              core.info(
+                `Command ${polledCmd.id} re-polled, but was already sent for processing. Ignoring.`,
+              );
+            }
           }
+        }
 
-          // Start processing in the background, do not await here to keep polling loop active
-          processCommands({
-            commands,
-            runId,
-            scripts,
-          }).catch((error) => {
-            // Catch unexpected errors from the processCommandsWithConcurrency orchestrator itself
-            core.error(
-              `Unexpected error during background command processing orchestrator: ${error}`,
-            );
+        const commandsToAttemptAck = Array.from(pendingAckCommands.values());
+
+        if (commandsToAttemptAck.length > 0) {
+          core.info(`Attempting to acknowledge ${commandsToAttemptAck.length} command(s).`);
+
+          // The promises from this .map() will always fulfill with an object describing the ack outcome.
+          const ackOperationPromises = commandsToAttemptAck.map(async (cmdToAck) => {
+            try {
+              await ackCommand({ runId, commandId: cmdToAck.id });
+              return { success: true as const, command: cmdToAck, error: undefined };
+            } catch (error) {
+              core.warning(
+                `Failed to acknowledge command ${cmdToAck.id}: ${error}. It will remain in the pending queue.`,
+              );
+              return { success: false as const, command: cmdToAck, error };
+            }
           });
-        } else {
-          core.debug("No commands received");
+
+          const ackPromiseSettledResults = await Promise.allSettled(ackOperationPromises);
+
+          const successfullyAckedCommands: IActionCommand[] = [];
+          ackPromiseSettledResults.forEach((settledResult, index) => {
+            const originalCommand = commandsToAttemptAck[index];
+
+            if (settledResult.status === "fulfilled") {
+              const ackOutcome = settledResult.value;
+              const command = ackOutcome.command;
+
+              if (ackOutcome.success) {
+                pendingAckCommands.delete(command.id);
+                core.info(`Command ${command.id} acknowledged and removed from pending queue.`);
+
+                if (commandsSentToProcess.has(command.id)) {
+                  core.info(
+                    `Command ${command.id} was acknowledged but already marked as sent to process. Won't re-process.`,
+                  );
+                } else {
+                  successfullyAckedCommands.push(command);
+                }
+              } else {
+                // Ack failed, command remains in pendingAckCommands.
+                core.info(
+                  `Ack for command ${command.id} failed (error: ${ackOutcome.error}), it remains in pending queue.`,
+                );
+              }
+            } else {
+              // This 'else' branch (settledResult.status === "rejected") should be highly unlikely,
+              // as the promises from ackOperationPromises are designed to always fulfill.
+              // This would indicate an unexpected error within the .map() callback itself, outside its try/catch.
+              core.error(
+                `Unexpected error during ack processing for command ${originalCommand.id}: ${settledResult.reason}. Command remains in pending queue.`,
+              );
+            }
+          });
+
+          if (successfullyAckedCommands.length > 0) {
+            core.info(`Successfully acknowledged ${successfullyAckedCommands.length} command(s).`);
+            successfullyAckedCommands.forEach((cmd) => {
+              core.info(`Command to be processed:\n${JSON.stringify(cmd, null, 2)}`);
+            });
+
+            const terminateCommand = successfullyAckedCommands.find(
+              (cmd) =>
+                cmd.command.type === CommandType.RUNNER &&
+                cmd.command.action === RunnerAction.TERMINATE,
+            );
+
+            if (terminateCommand) {
+              core.info(
+                `Terminate command ${terminateCommand.id} received and acknowledged. Exiting...`,
+              );
+              commandsSentToProcess.add(terminateCommand.id);
+              // any other successfullyAckedCommands in this batch won't be processed due to break. This is intended for TERMINATE.
+              break;
+            }
+
+            const commandsForProcessingThisCycle: IActionCommand[] = [];
+            for (const cmd of successfullyAckedCommands) {
+              commandsSentToProcess.add(cmd.id);
+              commandsForProcessingThisCycle.push(cmd);
+            }
+
+            if (commandsForProcessingThisCycle.length > 0) {
+              core.info(
+                `Dispatching ${commandsForProcessingThisCycle.length} commands for background processing.`,
+              );
+
+              // Start processing in the background
+              processCommands({
+                commands: commandsForProcessingThisCycle,
+                runId,
+                scripts,
+              }).catch((error) => {
+                core.error(
+                  `Unexpected error during background command processing orchestrator: ${error}`,
+                );
+              });
+            }
+          }
+        } else if (polledCommands.length === 0 && pendingAckCommands.size === 0) {
+          core.debug("No commands received and no commands pending acknowledgment.");
         }
       } catch (error) {
         // If this is just a timeout, it's expected behavior
@@ -106,10 +194,19 @@ async function run() {
             `Polling error: ${error} (consecutive errors: ${consecutiveErrorCount}/${MAX_CONSECUTIVE_ERRORS})`,
           );
 
-          const axiosError = error as any;
-          if (axiosError.response && axiosError.response.status === 401) {
+          const detailedError = error as any;
+
+          if (detailedError.code) {
+            core.warning(`Error code: ${detailedError.code}`);
+          }
+
+          if (error instanceof Error && error.stack) {
+            core.warning(`Stack trace: ${error.stack}`);
+          }
+
+          if (detailedError.response && detailedError.response.status === 401) {
             core.setFailed(
-              `Error: ${axiosError.response.data.error}. Verify that authToken is valid. Exiting...`,
+              `Error: ${detailedError.response.data.error}. Verify that authToken is valid. Exiting...`,
             );
             process.exit(1);
           }

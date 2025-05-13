@@ -83,16 +83,22 @@ async function withRetry<T>(requestFn: () => Promise<T>, maxRetries = 3): Promis
 }
 
 export const pollCommands = async ({ runId }: { runId: string }): Promise<IActionCommand[]> => {
-  const response = await axios.get(`${serverUrl}/poll-commands`, {
-    params: {
-      runId,
-      runnerMetadata,
-    },
-    signal: AbortSignal.timeout(timeoutMs),
-    headers,
-  });
+  try {
+    const response = await axios.get(`${serverUrl}/poll-commands`, {
+      params: {
+        runId,
+        runnerMetadata,
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+      headers,
+    });
 
-  return response.data.commands as IActionCommand[];
+    return response.data.commands as IActionCommand[];
+  } catch (error) {
+    core.info(`[pollCommands][${new Date().toISOString()}] Error polling commands: ${error}`);
+
+    throw error;
+  }
 };
 
 export const ackCommand = async ({ runId, commandId }: { runId: string; commandId: string }) => {

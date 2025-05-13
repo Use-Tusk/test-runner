@@ -55899,15 +55899,21 @@ async function withRetry(requestFn, maxRetries = 3) {
     throw lastError || new Error("Retry mechanism failed unexpectedly.");
 }
 const pollCommands = async ({ runId }) => {
-    const response = await axios.get(`${serverUrl}/poll-commands`, {
-        params: {
-            runId,
-            runnerMetadata,
-        },
-        signal: AbortSignal.timeout(timeoutMs),
-        headers,
-    });
-    return response.data.commands;
+    try {
+        const response = await axios.get(`${serverUrl}/poll-commands`, {
+            params: {
+                runId,
+                runnerMetadata,
+            },
+            signal: AbortSignal.timeout(timeoutMs),
+            headers,
+        });
+        return response.data.commands;
+    }
+    catch (error) {
+        coreExports.info(`[pollCommands][${new Date().toISOString()}] Error polling commands: ${error}`);
+        throw error;
+    }
 };
 const ackCommand = async ({ runId, commandId }) => {
     return withRetry(async () => {
@@ -59388,6 +59394,8 @@ async function run() {
         // Counter for consecutive polling errors
         const MAX_CONSECUTIVE_ERRORS = 5;
         let consecutiveErrorCount = 0;
+        const pendingAckCommands = new Map();
+        const commandsSentToProcess = new Set();
         while (Date.now() < endTime) {
             // Check for inactivity timeout
             if (Date.now() - lastCommandReceivedTime > inactivityTimeoutSeconds * 1000) {
@@ -59397,36 +59405,103 @@ async function run() {
             try {
                 coreExports.info(`[${new Date().toISOString()}] Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`);
                 coreExports.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
-                const commands = await pollCommands({ runId });
+                const polledCommands = await pollCommands({ runId });
                 consecutiveErrorCount = 0;
-                if (commands.length > 0) {
-                    coreExports.info(`Received ${commands.length} commands from server`);
+                if (polledCommands.length > 0) {
+                    coreExports.info(`Received ${polledCommands.length} commands from server`);
                     lastCommandReceivedTime = Date.now();
-                    const ackPromises = commands.map(async (cmd) => {
-                        await ackCommand({ runId, commandId: cmd.id });
-                    });
-                    await Promise.allSettled(ackPromises);
-                    commands.forEach((cmd) => {
-                        coreExports.info(`Command:\n${JSON.stringify(cmd, null, 2)}`);
-                    });
-                    const terminateCommand = commands.find((cmd) => cmd.command.type === CommandType.RUNNER &&
-                        cmd.command.action === RunnerAction.TERMINATE);
-                    if (terminateCommand) {
-                        coreExports.info(`Terminate command ${terminateCommand.id} received and acknowledged, exiting...`);
-                        break;
+                    for (const polledCmd of polledCommands) {
+                        // If not acked yet and not already sent for processing, add to pendingAckCommands
+                        if (!pendingAckCommands.has(polledCmd.id) && !commandsSentToProcess.has(polledCmd.id)) {
+                            pendingAckCommands.set(polledCmd.id, polledCmd);
+                            coreExports.info(`New command ${polledCmd.id} added to pending acknowledgment queue.`);
+                        }
+                        else if (pendingAckCommands.has(polledCmd.id)) {
+                            // Already pending ack, will attempt ack again
+                            coreExports.info(`Command ${polledCmd.id} re-polled, already pending acknowledgment. Will attempt ack again.`);
+                        }
+                        else {
+                            // Already in commandsSentToProcess
+                            coreExports.info(`Command ${polledCmd.id} re-polled, but was already sent for processing. Ignoring.`);
+                        }
                     }
-                    // Start processing in the background, do not await here to keep polling loop active
-                    processCommands({
-                        commands,
-                        runId,
-                        scripts,
-                    }).catch((error) => {
-                        // Catch unexpected errors from the processCommandsWithConcurrency orchestrator itself
-                        coreExports.error(`Unexpected error during background command processing orchestrator: ${error}`);
-                    });
                 }
-                else {
-                    coreExports.debug("No commands received");
+                const commandsToAttemptAck = Array.from(pendingAckCommands.values());
+                if (commandsToAttemptAck.length > 0) {
+                    coreExports.info(`Attempting to acknowledge ${commandsToAttemptAck.length} command(s).`);
+                    // The promises from this .map() will always fulfill with an object describing the ack outcome.
+                    const ackOperationPromises = commandsToAttemptAck.map(async (cmdToAck) => {
+                        try {
+                            await ackCommand({ runId, commandId: cmdToAck.id });
+                            return { success: true, command: cmdToAck, error: undefined };
+                        }
+                        catch (error) {
+                            coreExports.warning(`Failed to acknowledge command ${cmdToAck.id}: ${error}. It will remain in the pending queue.`);
+                            return { success: false, command: cmdToAck, error };
+                        }
+                    });
+                    const ackPromiseSettledResults = await Promise.allSettled(ackOperationPromises);
+                    const successfullyAckedCommands = [];
+                    ackPromiseSettledResults.forEach((settledResult, index) => {
+                        const originalCommand = commandsToAttemptAck[index];
+                        if (settledResult.status === "fulfilled") {
+                            const ackOutcome = settledResult.value;
+                            const command = ackOutcome.command;
+                            if (ackOutcome.success) {
+                                pendingAckCommands.delete(command.id);
+                                coreExports.info(`Command ${command.id} acknowledged and removed from pending queue.`);
+                                if (commandsSentToProcess.has(command.id)) {
+                                    coreExports.info(`Command ${command.id} was acknowledged but already marked as sent to process. Won't re-process.`);
+                                }
+                                else {
+                                    successfullyAckedCommands.push(command);
+                                }
+                            }
+                            else {
+                                // Ack failed, command remains in pendingAckCommands.
+                                coreExports.info(`Ack for command ${command.id} failed (error: ${ackOutcome.error}), it remains in pending queue.`);
+                            }
+                        }
+                        else {
+                            // This 'else' branch (settledResult.status === "rejected") should be highly unlikely,
+                            // as the promises from ackOperationPromises are designed to always fulfill.
+                            // This would indicate an unexpected error within the .map() callback itself, outside its try/catch.
+                            coreExports.error(`Unexpected error during ack processing for command ${originalCommand.id}: ${settledResult.reason}. Command remains in pending queue.`);
+                        }
+                    });
+                    if (successfullyAckedCommands.length > 0) {
+                        coreExports.info(`Successfully acknowledged ${successfullyAckedCommands.length} command(s).`);
+                        successfullyAckedCommands.forEach((cmd) => {
+                            coreExports.info(`Command to be processed:\n${JSON.stringify(cmd, null, 2)}`);
+                        });
+                        const terminateCommand = successfullyAckedCommands.find((cmd) => cmd.command.type === CommandType.RUNNER &&
+                            cmd.command.action === RunnerAction.TERMINATE);
+                        if (terminateCommand) {
+                            coreExports.info(`Terminate command ${terminateCommand.id} received and acknowledged. Exiting...`);
+                            commandsSentToProcess.add(terminateCommand.id);
+                            // any other successfullyAckedCommands in this batch won't be processed due to break. This is intended for TERMINATE.
+                            break;
+                        }
+                        const commandsForProcessingThisCycle = [];
+                        for (const cmd of successfullyAckedCommands) {
+                            commandsSentToProcess.add(cmd.id);
+                            commandsForProcessingThisCycle.push(cmd);
+                        }
+                        if (commandsForProcessingThisCycle.length > 0) {
+                            coreExports.info(`Dispatching ${commandsForProcessingThisCycle.length} commands for background processing.`);
+                            // Start processing in the background
+                            processCommands({
+                                commands: commandsForProcessingThisCycle,
+                                runId,
+                                scripts,
+                            }).catch((error) => {
+                                coreExports.error(`Unexpected error during background command processing orchestrator: ${error}`);
+                            });
+                        }
+                    }
+                }
+                else if (polledCommands.length === 0 && pendingAckCommands.size === 0) {
+                    coreExports.debug("No commands received and no commands pending acknowledgment.");
                 }
             }
             catch (error) {
@@ -59437,9 +59512,15 @@ async function run() {
                 else {
                     consecutiveErrorCount++;
                     coreExports.warning(`Polling error: ${error} (consecutive errors: ${consecutiveErrorCount}/${MAX_CONSECUTIVE_ERRORS})`);
-                    const axiosError = error;
-                    if (axiosError.response && axiosError.response.status === 401) {
-                        coreExports.setFailed(`Error: ${axiosError.response.data.error}. Verify that authToken is valid. Exiting...`);
+                    const detailedError = error;
+                    if (detailedError.code) {
+                        coreExports.warning(`Error code: ${detailedError.code}`);
+                    }
+                    if (error instanceof Error && error.stack) {
+                        coreExports.warning(`Stack trace: ${error.stack}`);
+                    }
+                    if (detailedError.response && detailedError.response.status === 401) {
+                        coreExports.setFailed(`Error: ${detailedError.response.data.error}. Verify that authToken is valid. Exiting...`);
                         process.exit(1);
                     }
                     if (consecutiveErrorCount >= MAX_CONSECUTIVE_ERRORS) {
