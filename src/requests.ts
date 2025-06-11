@@ -1,6 +1,11 @@
 import axios from "axios";
 import * as core from "@actions/core";
-import { IActionCommand, IActionCommandResult, ITestExecutionConfig } from "./types.js";
+import {
+  IActionCommand,
+  IActionCommandResult,
+  ITestExecutionConfig,
+  ITestingSandboxConfigInfo,
+} from "./types.js";
 
 const serverUrl = core.getInput("tuskUrl", { required: true }).replace(/\/$/, "");
 const authToken = core.getInput("authToken", { required: true });
@@ -82,11 +87,18 @@ async function withRetry<T>(requestFn: () => Promise<T>, maxRetries = 3): Promis
   throw lastError || new Error("Retry mechanism failed unexpectedly.");
 }
 
-export const pollCommands = async ({ runId }: { runId: string }): Promise<IActionCommand[]> => {
+export const pollCommands = async ({
+  runId,
+  testingSandboxConfigId,
+}: {
+  runId: string;
+  testingSandboxConfigId?: string;
+}): Promise<IActionCommand[]> => {
   try {
     const response = await axios.get(`${serverUrl}/poll-commands`, {
       params: {
         runId,
+        testingSandboxConfigId,
         runnerMetadata,
       },
       signal: AbortSignal.timeout(timeoutMs),
@@ -161,11 +173,11 @@ export const sendCommandResult = async ({
   });
 };
 
-export const getTestExecutionConfig = async ({
+export const getTestingSandboxConfigInfo = async ({
   runId,
 }: {
   runId: string;
-}): Promise<ITestExecutionConfig | null> => {
+}): Promise<ITestingSandboxConfigInfo | null> => {
   return withRetry(async () => {
     const response = await axios.get(`${serverUrl}/test-execution-config`, {
       params: {
@@ -182,7 +194,8 @@ export const getTestExecutionConfig = async ({
       );
 
       const testExecutionConfig = response.data.testExecutionConfig as ITestExecutionConfig;
-      return testExecutionConfig;
+      const testingSandboxConfigId = response.data.testingSandboxConfigId;
+      return { testingSandboxConfigId, testExecutionConfig };
     } else {
       core.warning(
         `[getTestExecutionConfig][${new Date().toISOString()}] Failed to fetch test execution config. Server response: ${response.data}`,

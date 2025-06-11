@@ -1,15 +1,26 @@
 import * as core from "@actions/core";
 import Bottleneck from "bottleneck";
-import { getTestExecutionConfig } from "./requests.js";
+import { getTestingSandboxConfigInfo } from "./requests.js";
+
+core.info("Starting limiter setup...");
 
 const runId = core.getInput("runId", { required: true });
 
 let serverConfigMaxConcurrency: number | undefined = undefined;
+let testingSandboxConfigId: string | undefined = undefined;
+
 try {
-  const serverTestExecutionConfig = await getTestExecutionConfig({ runId });
-  serverConfigMaxConcurrency = serverTestExecutionConfig?.maxConcurrency;
+  const testingSandboxConfigInfo = await getTestingSandboxConfigInfo({ runId });
+  serverConfigMaxConcurrency = testingSandboxConfigInfo?.testExecutionConfig.maxConcurrency;
+  testingSandboxConfigId = testingSandboxConfigInfo?.testingSandboxConfigId;
 } catch (error) {
-  core.warning(`Failed to fetch test execution config.`);
+  core.warning(`Failed to fetch testing sandbox config info: ${error}`);
+}
+
+if (testingSandboxConfigId) {
+  core.info(`Using testing sandbox config ID: ${testingSandboxConfigId}`);
+} else {
+  core.info("No testing sandbox config ID found.");
 }
 
 const stepInputMaxConcurrencyStr = core.getInput("maxConcurrency");
@@ -54,4 +65,4 @@ const limiter = new Bottleneck({
   trackDoneStatus: true,
 });
 
-export { limiter, maxConcurrency };
+export { limiter, maxConcurrency, testingSandboxConfigId };

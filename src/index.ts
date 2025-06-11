@@ -2,7 +2,7 @@ import * as core from "@actions/core";
 import { CommandType, IActionCommand, RunnerAction, ScriptData } from "./types.js";
 import { processCommands } from "./handleCommands.js";
 import { ackCommand, pollCommands } from "./requests.js";
-import { limiter } from "./limiter.js";
+import { limiter, testingSandboxConfigId } from "./limiter.js";
 
 async function run() {
   core.info("Starting runner...");
@@ -55,7 +55,7 @@ async function run() {
 
         core.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
 
-        const polledCommands = await pollCommands({ runId });
+        const polledCommands = await pollCommands({ runId, testingSandboxConfigId });
 
         consecutiveErrorCount = 0;
 

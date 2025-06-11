@@ -55898,11 +55898,12 @@ async function withRetry(requestFn, maxRetries = 3) {
     // But it satisfies TypeScript's need for a return path if the loop somehow completes without returning/throwing
     throw lastError || new Error("Retry mechanism failed unexpectedly.");
 }
-const pollCommands = async ({ runId }) => {
+const pollCommands = async ({ runId, testingSandboxConfigId, }) => {
     try {
         const response = await axios.get(`${serverUrl}/poll-commands`, {
             params: {
                 runId,
+                testingSandboxConfigId,
                 runnerMetadata,
             },
             signal: AbortSignal.timeout(timeoutMs),
@@ -55951,7 +55952,7 @@ const sendCommandResult = async ({ runId, result, }) => {
         }
     });
 };
-const getTestExecutionConfig = async ({ runId, }) => {
+const getTestingSandboxConfigInfo = async ({ runId, }) => {
     return withRetry(async () => {
         const response = await axios.get(`${serverUrl}/test-execution-config`, {
             params: {
@@ -55964,7 +55965,8 @@ const getTestExecutionConfig = async ({ runId, }) => {
         if (response.status === 200) {
             coreExports.info(`[getTestExecutionConfig][${new Date().toISOString()}] Successfully fetched test execution config`);
             const testExecutionConfig = response.data.testExecutionConfig;
-            return testExecutionConfig;
+            const testingSandboxConfigId = response.data.testingSandboxConfigId;
+            return { testingSandboxConfigId, testExecutionConfig };
         }
         else {
             coreExports.warning(`[getTestExecutionConfig][${new Date().toISOString()}] Failed to fetch test execution config. Server response: ${response.data}`);
@@ -58912,14 +58914,23 @@ function requireLib () {
 var libExports = requireLib();
 var Bottleneck = /*@__PURE__*/getDefaultExportFromCjs(libExports);
 
+coreExports.info("Starting limiter setup...");
 const runId = coreExports.getInput("runId", { required: true });
 let serverConfigMaxConcurrency = undefined;
+let testingSandboxConfigId = undefined;
 try {
-    const serverTestExecutionConfig = await getTestExecutionConfig({ runId });
-    serverConfigMaxConcurrency = serverTestExecutionConfig?.maxConcurrency;
+    const testingSandboxConfigInfo = await getTestingSandboxConfigInfo({ runId });
+    serverConfigMaxConcurrency = testingSandboxConfigInfo?.testExecutionConfig.maxConcurrency;
+    testingSandboxConfigId = testingSandboxConfigInfo?.testingSandboxConfigId;
 }
 catch (error) {
-    coreExports.warning(`Failed to fetch test execution config.`);
+    coreExports.warning(`Failed to fetch testing sandbox config info: ${error}`);
+}
+if (testingSandboxConfigId) {
+    coreExports.info(`Using testing sandbox config ID: ${testingSandboxConfigId}`);
+}
+else {
+    coreExports.info("No testing sandbox config ID found.");
 }
 const stepInputMaxConcurrencyStr = coreExports.getInput("maxConcurrency");
 const DEFAULT_MAX_CONCURRENCY = 5;
@@ -59405,7 +59416,7 @@ async function run() {
             try {
                 coreExports.info(`[${new Date().toISOString()}] Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`);
                 coreExports.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
-                const polledCommands = await pollCommands({ runId });
+                const polledCommands = await pollCommands({ runId, testingSandboxConfigId });
                 consecutiveErrorCount = 0;
                 if (polledCommands.length > 0) {
                     coreExports.info(`Received ${polledCommands.length} commands from server`);

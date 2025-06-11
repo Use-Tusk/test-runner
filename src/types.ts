@@ -107,3 +107,8 @@ export interface AbsolutePathData {
 export interface ITestExecutionConfig {
   maxConcurrency?: number;
 }
+
+export interface ITestingSandboxConfigInfo {
+  testingSandboxConfigId: string;
+  testExecutionConfig: ITestExecutionConfig;
+}
