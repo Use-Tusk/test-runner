@@ -48,6 +48,9 @@ inputs:
   maxConcurrency:
     description: "Maximum number of commands to run concurrently"
     required: false
+  runnerIndex:
+    description: "Runner index"
+    required: false
 
 runs:
   using: node20

@@ -23,6 +23,9 @@ async function run() {
       coverage: coverageScript,
     };
 
+    const runnerIndex = core.getInput("runnerIndex", { required: false }) || undefined;
+    core.info(`Runner index: ${runnerIndex}`);
+
     const pollingDuration = parseInt(core.getInput("pollingDuration") || "3600", 10); // Default 60 minutes
     const pollingInterval = parseInt(core.getInput("pollingInterval") || "5", 10); // Default 5 seconds
     const inactivityTimeoutSeconds = 20 * 60; // 20 minutes
@@ -55,7 +58,7 @@ async function run() {
 
         core.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
 
-        const polledCommands = await pollCommands({ runId, testingSandboxConfigId });
+        const polledCommands = await pollCommands({ runId, testingSandboxConfigId, runnerIndex });
 
         consecutiveErrorCount = 0;
 

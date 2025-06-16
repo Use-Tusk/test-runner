@@ -90,15 +90,18 @@ async function withRetry<T>(requestFn: () => Promise<T>, maxRetries = 3): Promis
 export const pollCommands = async ({
   runId,
   testingSandboxConfigId,
+  runnerIndex,
 }: {
   runId: string;
   testingSandboxConfigId?: string;
+  runnerIndex?: string;
 }): Promise<IActionCommand[]> => {
   try {
     const response = await axios.get(`${serverUrl}/poll-commands`, {
       params: {
         runId,
         testingSandboxConfigId,
+        runnerIndex,
         runnerMetadata,
       },
       signal: AbortSignal.timeout(timeoutMs),

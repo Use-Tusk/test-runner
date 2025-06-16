@@ -55898,12 +55898,13 @@ async function withRetry(requestFn, maxRetries = 3) {
     // But it satisfies TypeScript's need for a return path if the loop somehow completes without returning/throwing
     throw lastError || new Error("Retry mechanism failed unexpectedly.");
 }
-const pollCommands = async ({ runId, testingSandboxConfigId, }) => {
+const pollCommands = async ({ runId, testingSandboxConfigId, runnerIndex, }) => {
     try {
         const response = await axios.get(`${serverUrl}/poll-commands`, {
             params: {
                 runId,
                 testingSandboxConfigId,
+                runnerIndex,
                 runnerMetadata,
             },
             signal: AbortSignal.timeout(timeoutMs),
@@ -59395,6 +59396,8 @@ async function run() {
             lint: lintScript,
             coverage: coverageScript,
         };
+        const runnerIndex = coreExports.getInput("runnerIndex", { required: false }) || undefined;
+        coreExports.info(`Runner index: ${runnerIndex}`);
         const pollingDuration = parseInt(coreExports.getInput("pollingDuration") || "3600", 10); // Default 60 minutes
         const pollingInterval = parseInt(coreExports.getInput("pollingInterval") || "5", 10); // Default 5 seconds
         const inactivityTimeoutSeconds = 20 * 60; // 20 minutes
@@ -59416,7 +59419,7 @@ async function run() {
             try {
                 coreExports.info(`[${new Date().toISOString()}] Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`);
                 coreExports.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
-                const polledCommands = await pollCommands({ runId, testingSandboxConfigId });
+                const polledCommands = await pollCommands({ runId, testingSandboxConfigId, runnerIndex });
                 consecutiveErrorCount = 0;
                 if (polledCommands.length > 0) {
                     coreExports.info(`Received ${polledCommands.length} commands from server`);
