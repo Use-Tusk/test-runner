@@ -27267,6 +27267,7 @@ var FileAction;
     FileAction["LINT_READ"] = "lint_read";
     FileAction["WRITE_LINT_READ"] = "write_lint_read";
     FileAction["COVERAGE"] = "coverage";
+    FileAction["DELETE"] = "delete";
 })(FileAction || (FileAction = {}));
 var RunnerAction;
 (function (RunnerAction) {
@@ -59088,6 +59089,9 @@ async function processFileCommand({ command, runId, scripts, }) {
             case FileAction.COVERAGE:
                 result = await handleCoverageAction(scripts, data);
                 break;
+            case FileAction.DELETE:
+                result = await handleDeleteAction(data);
+                break;
         }
     }
     catch (error) {
@@ -59316,6 +59320,40 @@ ${coverageScript}
         commandName: "Coverage",
         commandType: CommandType.FILE,
     }));
+}
+async function handleDeleteAction(data) {
+    const { filePath: fullFilePath } = setupPaths(data);
+    try {
+        await fs.unlink(fullFilePath);
+        coreExports.info(`
+[delete]
+File deleted: ${fullFilePath}
+`);
+        return {
+            stdout: `File deleted: ${fullFilePath}`,
+            stderr: "",
+            exitCode: 0,
+            type: CommandType.FILE,
+            completedAt: Date.now(),
+        };
+    }
+    catch (error) {
+        if (error.code === "ENOENT") {
+            // File doesn't exist, which could be considered success for delete
+            coreExports.info(`
+[delete]
+File does not exist (already deleted): ${fullFilePath}
+`);
+            return {
+                stdout: `File does not exist (already deleted): ${fullFilePath}`,
+                stderr: "",
+                exitCode: 0,
+                type: CommandType.FILE,
+                completedAt: Date.now(),
+            };
+        }
+        throw new ActionError(`Failed to delete file (${fullFilePath}): ${error instanceof Error ? error.message : String(error)}`);
+    }
 }
 async function executeScript({ script, cwd, commandName, commandType, }) {
     coreExports.info(`Executing ${commandName.toLowerCase()} script in ${cwd}: ${script}`);

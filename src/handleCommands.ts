@@ -194,6 +194,9 @@ export async function processFileCommand({
       case FileAction.COVERAGE:
         result = await handleCoverageAction(scripts, data);
         break;
+      case FileAction.DELETE:
+        result = await handleDeleteAction(data);
+        break;
     }
   } catch (error) {
     core.warning(`Error processing command: ${error}`);
@@ -498,6 +501,45 @@ ${coverageScript}
     commandName: "Coverage",
     commandType: CommandType.FILE,
   })) as IBaseFileCommandResult;
+}
+
+async function handleDeleteAction(data: IFileCommandData): Promise<IBaseFileCommandResult> {
+  const { filePath: fullFilePath } = setupPaths(data);
+
+  try {
+    await fs.unlink(fullFilePath);
+    core.info(`
+[delete]
+File deleted: ${fullFilePath}
+`);
+
+    return {
+      stdout: `File deleted: ${fullFilePath}`,
+      stderr: "",
+      exitCode: 0,
+      type: CommandType.FILE,
+      completedAt: Date.now(),
+    };
+  } catch (error) {
+    if ((error as any).code === "ENOENT") {
+      // File doesn't exist, which could be considered success for delete
+      core.info(`
+[delete]
+File does not exist (already deleted): ${fullFilePath}
+`);
+      return {
+        stdout: `File does not exist (already deleted): ${fullFilePath}`,
+        stderr: "",
+        exitCode: 0,
+        type: CommandType.FILE,
+        completedAt: Date.now(),
+      };
+    }
+
+    throw new ActionError(
+      `Failed to delete file (${fullFilePath}): ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 async function executeScript({

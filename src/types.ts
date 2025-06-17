@@ -18,6 +18,7 @@ export enum FileAction {
   LINT_READ = "lint_read",
   WRITE_LINT_READ = "write_lint_read",
   COVERAGE = "coverage",
+  DELETE = "delete",
 }
 
 export enum RunnerAction {
