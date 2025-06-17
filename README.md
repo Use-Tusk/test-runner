@@ -174,13 +174,88 @@ For calculating test coverage gains, we support Pytest and Jest at the moment.
   npm run test {{testFilePaths}} -- --coverage --coverageReporters=json-summary
   ```
 
-### Additional inputs (advanced)
+## Advanced Configuration
+
+### Additional inputs
 
 The test runner step also takes these optional inputs to further configure the command polling behavior. In general, we recommend to leave them as they are unless you have a specific reason to deviate from these defaults.
 
 - `pollingDuration`: How long to poll for commands (in seconds). Defaults to "3600".
 - `pollingInterval`: How often to poll for commands (in seconds). Defaults to "5".
 - `maxConcurrency`: Maximum number of commands to run concurrently. Defaults to "5".
+
+### Using multiple jobs as parallel runners
+
+We support using `strategy: matrix` to set up concurrent jobs. Each job will serve as a runner for test execution.
+
+Set:
+
+- `on.workflow_dispatch.inputs.runnerIndexes`
+- `jobs.<action>.strategy.matrix.runnerIndex`
+- `jobs.<action>.steps.<Tusk step>.with.runnerIndex`
+
+to the values in the example shown below.
+
+<details>
+  <summary>Example</summary>
+
+```yaml
+name: Tusk Test Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      runId:
+        description: "Tusk Run ID"
+        required: true
+      tuskUrl:
+        description: "Tusk server URL"
+        required: true
+      commitSha:
+        description: "Commit SHA to checkout"
+        required: true
+      runnerIndexes:
+        description: "Runner indexes"
+        required: false
+        default: "['1']"
+
+jobs:
+  test-action:
+    name: Tusk Test Runner
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        runnerIndex: ${{ fromJson(github.event.inputs.runnerIndexes) }}
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commitSha }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Start runner
+        id: test-action
+        uses: Use-Tusk/test-runner@v1
+        with:
+          runId: ${{ github.event.inputs.runId }}
+          tuskUrl: ${{ github.event.inputs.tuskUrl }}
+          commitSha: ${{ github.event.inputs.commitSha }}
+          authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
+          testFramework: "pytest"
+          testFileRegex: "^tests/.*(test_.*|.*_test).py$"
+          lintScript: black {{ file }}
+          testScript: pytest {{ file }}
+          runnerIndex: ${{ matrix.runnerIndex }}
+```
+
+</details>
+
+You will also need to set the number of sandboxes to use in the Tusk app. Tusk will use that to determine the indexes to set during workflow dispatch.
 
 ## Contact
 
