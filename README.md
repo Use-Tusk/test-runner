@@ -217,7 +217,7 @@ on:
       runnerIndexes:
         description: "Runner indexes"
         required: false
-        default: "['1']"
+        default: "[\"1\"]"
 
 jobs:
   test-action:
