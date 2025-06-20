@@ -166,7 +166,7 @@ In your lint and test scripts, use `{{file}}` as a placeholder for where a speci
 For calculating test coverage gains, we support Pytest and Jest at the moment.
 
 - For Pytest, your coverage script should write coverage data into `coverage.json` (the default file for Pytest). In the above example, we assume the `coverage` package is installed as part of the project requirements.
-- For Jest, your coverage script should write coverage data into `coverage-summary.json` (the default file for Jest).
+- For Jest, your coverage script should write coverage data into `/coverage/coverage-summary.json` (the default file for Jest).
 
   Example:
 
