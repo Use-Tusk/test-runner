@@ -7,7 +7,17 @@ import {
   ITestingSandboxConfigInfo,
 } from "./types.js";
 
-const serverUrl = core.getInput("tuskUrl", { required: true }).replace(/\/$/, "");
+const rawServerUrl = core.getInput("tuskUrl", { required: true }).replace(/\/$/, "");
+
+// Parse the server URL to extract base URL and query parameters
+// Query parameters are used to pass information to the server, e.g. runType
+const parsedUrl = new URL(rawServerUrl);
+const serverUrl = `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.pathname}`;
+// TODO: add better type support (confirm that runType is present instead of any)
+const serverQueryParams: {
+  runType: string;
+} = Object.fromEntries(parsedUrl.searchParams) as any;
+
 const authToken = core.getInput("authToken", { required: true });
 const timeoutMs = 10_000;
 
@@ -19,6 +29,7 @@ const headers = {
 // Send GitHub runner context to the server for every request
 // Full list: https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#default-environment-variables
 const runnerMetadata = {
+  runType: serverQueryParams.runType,
   githubRepo: process.env.GITHUB_REPOSITORY,
   githubRef: process.env.GITHUB_REF,
   githubRunId: process.env.GITHUB_RUN_ID, // Workflow run ID. This number does not change if you re-run the workflow run.
