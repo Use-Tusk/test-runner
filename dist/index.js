@@ -59365,9 +59365,13 @@ File does not exist (already deleted): ${fullFilePath}
 async function executeScript({ script, cwd, commandName, commandType, }) {
     coreExports.info(`Executing ${commandName.toLowerCase()} script in ${cwd}: ${script}`);
     return new Promise((resolve) => {
-        let timeoutDuration = 10 * 60 * 1000; // 10 minute timeout
+        let timeoutDuration = 5 * 60 * 1000; // 5 minute timeout
         if (commandName === "Lint") {
             timeoutDuration = 2 * 60 * 1000; // 2 minute timeout
+        }
+        else if (commandName === "Coverage") {
+            // Running coverage across multiple files can take a while
+            timeoutDuration = 10 * 60 * 1000; // 10 minute timeout
         }
         const maxBufferSize = 10 * 1024 * 1024; // 10 MB buffer
         const child = exec$1(script, { cwd, timeout: timeoutDuration, maxBuffer: maxBufferSize }, (error, stdout, stderr) => {
