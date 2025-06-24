@@ -27,7 +27,7 @@ async function run() {
     core.info(`Runner index: ${runnerIndex}`);
 
     const pollingDuration = parseInt(core.getInput("pollingDuration") || "3600", 10); // Default 60 minutes
-    const pollingInterval = parseInt(core.getInput("pollingInterval") || "5", 10); // Default 5 seconds
+    const pollingInterval = parseInt(core.getInput("pollingInterval") || "2", 10); // Default 2 seconds
     const inactivityTimeoutSeconds = 20 * 60; // 20 minutes
 
     // Start polling for commands

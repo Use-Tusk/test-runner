@@ -181,7 +181,7 @@ For calculating test coverage gains, we support Pytest and Jest at the moment.
 The test runner step also takes these optional inputs to further configure the command polling behavior. In general, we recommend to leave them as they are unless you have a specific reason to deviate from these defaults.
 
 - `pollingDuration`: How long to poll for commands (in seconds). Defaults to "3600".
-- `pollingInterval`: How often to poll for commands (in seconds). Defaults to "5".
+- `pollingInterval`: How often to poll for commands (in seconds). Defaults to "2".
 - `maxConcurrency`: Maximum number of commands to run concurrently. Defaults to "5".
 
 ### Using multiple jobs as parallel runners

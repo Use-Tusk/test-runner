@@ -1,5 +1,11 @@
 # Contributing Guide
 
+## Setup
+
+- Install node version - `nvm install`
+- Set node version - `nvm use`
+- Install dependencies - `npm install`
+
 ## Build
 
 - Make your desired changes.

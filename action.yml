@@ -44,7 +44,7 @@ inputs:
   pollingInterval:
     description: "How often to poll for commands (in seconds)"
     required: false
-    default: "5"
+    default: "2"
   maxConcurrency:
     description: "Maximum number of commands to run concurrently"
     required: false
