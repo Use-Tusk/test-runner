@@ -59447,7 +59447,7 @@ async function run() {
         };
         const runnerIndex = coreExports.getInput("runnerIndex", { required: false }) || undefined;
         coreExports.info(`Runner index: ${runnerIndex}`);
-        const pollingDuration = parseInt(coreExports.getInput("pollingDuration") || "3600", 10); // Default 60 minutes
+        const pollingDuration = parseInt(coreExports.getInput("pollingDuration") || "7200", 10); // Default 120 minutes
         const pollingInterval = parseInt(coreExports.getInput("pollingInterval") || "2", 10); // Default 2 seconds
         const inactivityTimeoutSeconds = 20 * 60; // 20 minutes
         // Start polling for commands
