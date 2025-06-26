@@ -59450,7 +59450,7 @@ async function run() {
         coreExports.info(`Runner index: ${runnerIndex}`);
         const pollingDuration = parseInt(coreExports.getInput("pollingDuration") || "7200", 10); // Default 120 minutes
         const pollingInterval = parseInt(coreExports.getInput("pollingInterval") || "2", 10); // Default 2 seconds
-        const inactivityTimeoutSeconds = 20 * 60; // 20 minutes
+        const inactivityTimeoutSeconds = 40 * 60; // 40 minutes
         // Start polling for commands
         const startTime = Date.now();
         const endTime = startTime + pollingDuration * 1000;

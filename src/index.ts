@@ -28,7 +28,7 @@ async function run() {
 
     const pollingDuration = parseInt(core.getInput("pollingDuration") || "7200", 10); // Default 120 minutes
     const pollingInterval = parseInt(core.getInput("pollingInterval") || "2", 10); // Default 2 seconds
-    const inactivityTimeoutSeconds = 20 * 60; // 20 minutes
+    const inactivityTimeoutSeconds = 40 * 60; // 40 minutes
 
     // Start polling for commands
     const startTime = Date.now();
