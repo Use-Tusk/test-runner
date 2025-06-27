@@ -131,6 +131,8 @@ export const isRunActive = async ({ runId }: { runId: string }): Promise<boolean
   return withRetry(async () => {
     const response = await axios.get(`${serverUrl}/run-status`, {
       params: { runId, runnerMetadata },
+      headers,
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     return response.data.active as boolean;

@@ -55929,6 +55929,8 @@ const isRunActive = async ({ runId }) => {
     return withRetry(async () => {
         const response = await axios.get(`${serverUrl}/run-status`, {
             params: { runId, runnerMetadata },
+            headers,
+            signal: AbortSignal.timeout(timeoutMs),
         });
         return response.data.active;
     });
