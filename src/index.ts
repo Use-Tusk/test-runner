@@ -1,7 +1,7 @@
 import * as core from "@actions/core";
 import { CommandType, IActionCommand, RunnerAction, ScriptData } from "./types.js";
 import { processCommands } from "./handleCommands.js";
-import { ackCommand, pollCommands } from "./requests.js";
+import { ackCommand, isRunActive, pollCommands } from "./requests.js";
 import { limiter, testingSandboxConfigId } from "./limiter.js";
 
 async function run() {
@@ -28,12 +28,11 @@ async function run() {
 
     const pollingDuration = parseInt(core.getInput("pollingDuration") || "7200", 10); // Default 120 minutes
     const pollingInterval = parseInt(core.getInput("pollingInterval") || "2", 10); // Default 2 seconds
-    const inactivityTimeoutSeconds = 40 * 60; // 40 minutes
+    const heartbeatIntervalSeconds = 60; // Default 1 minute
 
     // Start polling for commands
     const startTime = Date.now();
     const endTime = startTime + pollingDuration * 1000;
-    let lastCommandReceivedTime = startTime;
 
     // Counter for consecutive polling errors
     const MAX_CONSECUTIVE_ERRORS = 5;
@@ -42,18 +41,36 @@ async function run() {
     const pendingAckCommands: Map<string, IActionCommand> = new Map();
     const commandsSentToProcess = new Set<string>();
 
-    while (Date.now() < endTime) {
-      // Check for inactivity timeout
-      if (Date.now() - lastCommandReceivedTime > inactivityTimeoutSeconds * 1000) {
-        core.info(
-          `[${new Date().toISOString()}] No commands received for ${inactivityTimeoutSeconds} seconds. Exiting polling loop.`,
-        );
-        break;
-      }
+    let isRunStillActive = true;
+    const heartbeatInterval = setInterval(() => {
+      isRunActive({ runId })
+        .then((isActive) => {
+          if (isActive) {
+            core.info(`[${new Date().toISOString()}] Heartbeat: Run is still active.`);
+          } else {
+            core.info(
+              `[${new Date().toISOString()}] Heartbeat: Run is no longer active. Shutting down.`,
+            );
+            isRunStillActive = false;
+            clearInterval(heartbeatInterval);
+          }
+        })
+        .catch((error) => {
+          core.warning(
+            `[${new Date().toISOString()}] Heartbeat check failed: ${error}. Shutting down.`,
+          );
+          isRunStillActive = false;
+          clearInterval(heartbeatInterval);
+        });
+    }, heartbeatIntervalSeconds * 1000);
 
+    while (Date.now() < endTime && isRunStillActive) {
+      // Check for inactivity timeout
       try {
         core.info(
-          `[${new Date().toISOString()}] Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`,
+          `[${new Date().toISOString()}] Polling server for commands (${Math.round(
+            (endTime - Date.now()) / 1000,
+          )}s remaining)...`,
         );
 
         core.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
@@ -64,7 +81,6 @@ async function run() {
 
         if (polledCommands.length > 0) {
           core.info(`Received ${polledCommands.length} commands from server`);
-          lastCommandReceivedTime = Date.now();
 
           for (const polledCmd of polledCommands) {
             // If not acked yet and not already sent for processing, add to pendingAckCommands
@@ -227,6 +243,7 @@ async function run() {
       await new Promise((resolve) => setTimeout(resolve, pollingInterval * 1000));
     }
 
+    clearInterval(heartbeatInterval);
     core.info("Long-polling completed successfully");
 
     process.exit(0);

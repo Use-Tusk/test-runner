@@ -55925,6 +55925,14 @@ const pollCommands = async ({ runId, testingSandboxConfigId, runnerIndex, }) => 
         throw error;
     }
 };
+const isRunActive = async ({ runId }) => {
+    return withRetry(async () => {
+        const response = await axios.get(`${serverUrl}/run-status`, {
+            params: { runId, runnerMetadata },
+        });
+        return response.data.active;
+    });
+};
 const ackCommand = async ({ runId, commandId }) => {
     return withRetry(async () => {
         const response = await axios.post(`${serverUrl}/ack-command`, {
@@ -59450,22 +59458,36 @@ async function run() {
         coreExports.info(`Runner index: ${runnerIndex}`);
         const pollingDuration = parseInt(coreExports.getInput("pollingDuration") || "7200", 10); // Default 120 minutes
         const pollingInterval = parseInt(coreExports.getInput("pollingInterval") || "2", 10); // Default 2 seconds
-        const inactivityTimeoutSeconds = 40 * 60; // 40 minutes
+        const heartbeatIntervalSeconds = 60; // Default 1 minute
         // Start polling for commands
         const startTime = Date.now();
         const endTime = startTime + pollingDuration * 1000;
-        let lastCommandReceivedTime = startTime;
         // Counter for consecutive polling errors
         const MAX_CONSECUTIVE_ERRORS = 5;
         let consecutiveErrorCount = 0;
         const pendingAckCommands = new Map();
         const commandsSentToProcess = new Set();
-        while (Date.now() < endTime) {
+        let isRunStillActive = true;
+        const heartbeatInterval = setInterval(() => {
+            isRunActive({ runId })
+                .then((isActive) => {
+                if (isActive) {
+                    coreExports.info(`[${new Date().toISOString()}] Heartbeat: Run is still active.`);
+                }
+                else {
+                    coreExports.info(`[${new Date().toISOString()}] Heartbeat: Run is no longer active. Shutting down.`);
+                    isRunStillActive = false;
+                    clearInterval(heartbeatInterval);
+                }
+            })
+                .catch((error) => {
+                coreExports.warning(`[${new Date().toISOString()}] Heartbeat check failed: ${error}. Shutting down.`);
+                isRunStillActive = false;
+                clearInterval(heartbeatInterval);
+            });
+        }, heartbeatIntervalSeconds * 1000);
+        while (Date.now() < endTime && isRunStillActive) {
             // Check for inactivity timeout
-            if (Date.now() - lastCommandReceivedTime > inactivityTimeoutSeconds * 1000) {
-                coreExports.info(`[${new Date().toISOString()}] No commands received for ${inactivityTimeoutSeconds} seconds. Exiting polling loop.`);
-                break;
-            }
             try {
                 coreExports.info(`[${new Date().toISOString()}] Polling server for commands (${Math.round((endTime - Date.now()) / 1000)}s remaining)...`);
                 coreExports.info(`Current command queue stats: ${JSON.stringify(limiter.counts())}`);
@@ -59473,7 +59495,6 @@ async function run() {
                 consecutiveErrorCount = 0;
                 if (polledCommands.length > 0) {
                     coreExports.info(`Received ${polledCommands.length} commands from server`);
-                    lastCommandReceivedTime = Date.now();
                     for (const polledCmd of polledCommands) {
                         // If not acked yet and not already sent for processing, add to pendingAckCommands
                         if (!pendingAckCommands.has(polledCmd.id) && !commandsSentToProcess.has(polledCmd.id)) {
@@ -59597,6 +59618,7 @@ async function run() {
             }
             await new Promise((resolve) => setTimeout(resolve, pollingInterval * 1000));
         }
+        clearInterval(heartbeatInterval);
         coreExports.info("Long-polling completed successfully");
         process.exit(0);
     }

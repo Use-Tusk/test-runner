@@ -127,6 +127,16 @@ export const pollCommands = async ({
   }
 };
 
+export const isRunActive = async ({ runId }: { runId: string }): Promise<boolean> => {
+  return withRetry(async () => {
+    const response = await axios.get(`${serverUrl}/run-status`, {
+      params: { runId, runnerMetadata },
+    });
+
+    return response.data.active as boolean;
+  });
+};
+
 export const ackCommand = async ({ runId, commandId }: { runId: string; commandId: string }) => {
   return withRetry(async () => {
     const response = await axios.post(
