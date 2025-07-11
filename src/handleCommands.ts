@@ -563,6 +563,8 @@ async function executeScript({
       // Running coverage across multiple files can take a while
       // Consistent with timeout set in the Tusk server
       timeoutDuration = 15 * 60 * 1000; // 15 minute timeout
+    } else if (commandName === "Test") {
+      timeoutDuration = 15 * 60 * 1000; // 15 minute timeout
     }
 
     const maxBufferSize = 10 * 1024 * 1024; // 10 MB buffer

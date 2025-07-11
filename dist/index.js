@@ -59384,6 +59384,9 @@ async function executeScript({ script, cwd, commandName, commandType, }) {
             // Consistent with timeout set in the Tusk server
             timeoutDuration = 15 * 60 * 1000; // 15 minute timeout
         }
+        else if (commandName === "Test") {
+            timeoutDuration = 15 * 60 * 1000; // 15 minute timeout
+        }
         const maxBufferSize = 10 * 1024 * 1024; // 10 MB buffer
         const child = exec$1(script, { cwd, timeout: timeoutDuration, maxBuffer: maxBufferSize }, (error, stdout, stderr) => {
             const exitCode = error ? (error.code ?? 1) : 0;
