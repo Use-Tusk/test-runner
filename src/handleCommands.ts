@@ -521,7 +521,7 @@ File deleted: ${fullFilePath}
       completedAt: Date.now(),
     };
   } catch (error) {
-    if ((error as any).code === "ENOENT") {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
       // File doesn't exist, which could be considered success for delete
       core.info(`
 [delete]
@@ -580,7 +580,12 @@ async function executeScript({
         if (stdout) core.info(`[exec-callback] ${commandName} stdout: ${stdout}`);
         if (stderr) core.warning(`[exec-callback] ${commandName} stderr: ${stderr}`);
         if (error) {
-          if (error.signal === "SIGTERM" || (error as any).killed) {
+          const wasKilled =
+            typeof error === "object" &&
+            error !== null &&
+            "killed" in error &&
+            error.killed === true;
+          if (error.signal === "SIGTERM" || wasKilled) {
             core.warning(
               `[exec-callback] ${commandName} command timed out or was killed. Timeout: ${timeoutDuration / 1000}s.`,
             );

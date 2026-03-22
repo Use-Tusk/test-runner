@@ -913,6 +913,24 @@ function requireErrors () {
 	  [kSecureProxyConnectionError] = true
 	}
 
+	const kMessageSizeExceededError = Symbol.for('undici.error.UND_ERR_WS_MESSAGE_SIZE_EXCEEDED');
+	class MessageSizeExceededError extends UndiciError {
+	  constructor (message) {
+	    super(message);
+	    this.name = 'MessageSizeExceededError';
+	    this.message = message || 'Max decompressed message size exceeded';
+	    this.code = 'UND_ERR_WS_MESSAGE_SIZE_EXCEEDED';
+	  }
+
+	  static [Symbol.hasInstance] (instance) {
+	    return instance && instance[kMessageSizeExceededError] === true
+	  }
+
+	  get [kMessageSizeExceededError] () {
+	    return true
+	  }
+	}
+
 	errors = {
 	  AbortError,
 	  HTTPParserError,
@@ -936,7 +954,8 @@ function requireErrors () {
 	  ResponseExceededMaxSizeError,
 	  RequestRetryError,
 	  ResponseError,
-	  SecureProxyConnectionError
+	  SecureProxyConnectionError,
+	  MessageSizeExceededError
 	};
 	return errors;
 }
@@ -2237,6 +2256,10 @@ function requireRequest$1 () {
 	      throw new InvalidArgumentError('upgrade must be a string')
 	    }
 
+	    if (upgrade && !isValidHeaderValue(upgrade)) {
+	      throw new InvalidArgumentError('invalid upgrade header')
+	    }
+
 	    if (headersTimeout != null && (!Number.isFinite(headersTimeout) || headersTimeout < 0)) {
 	      throw new InvalidArgumentError('invalid headersTimeout')
 	    }
@@ -2531,13 +2554,19 @@ function requireRequest$1 () {
 	    val = `${val}`;
 	  }
 
-	  if (request.host === null && headerName === 'host') {
+	  if (headerName === 'host') {
+	    if (request.host !== null) {
+	      throw new InvalidArgumentError('duplicate host header')
+	    }
 	    if (typeof val !== 'string') {
 	      throw new InvalidArgumentError('invalid host header')
 	    }
 	    // Consumed by Client
 	    request.host = val;
-	  } else if (request.contentLength === null && headerName === 'content-length') {
+	  } else if (headerName === 'content-length') {
+	    if (request.contentLength !== null) {
+	      throw new InvalidArgumentError('duplicate content-length header')
+	    }
 	    request.contentLength = parseInt(val, 10);
 	    if (!Number.isFinite(request.contentLength)) {
 	      throw new InvalidArgumentError('invalid content-length header')
@@ -3548,9 +3577,9 @@ var hasRequiredConstants$3;
 function requireConstants$3 () {
 	if (hasRequiredConstants$3) return constants$3;
 	hasRequiredConstants$3 = 1;
-	(function (exports) {
-		Object.defineProperty(exports, "__esModule", { value: true });
-		exports.SPECIAL_HEADERS = exports.HEADER_STATE = exports.MINOR = exports.MAJOR = exports.CONNECTION_TOKEN_CHARS = exports.HEADER_CHARS = exports.TOKEN = exports.STRICT_TOKEN = exports.HEX = exports.URL_CHAR = exports.STRICT_URL_CHAR = exports.USERINFO_CHARS = exports.MARK = exports.ALPHANUM = exports.NUM = exports.HEX_MAP = exports.NUM_MAP = exports.ALPHA = exports.FINISH = exports.H_METHOD_MAP = exports.METHOD_MAP = exports.METHODS_RTSP = exports.METHODS_ICE = exports.METHODS_HTTP = exports.METHODS = exports.LENIENT_FLAGS = exports.FLAGS = exports.TYPE = exports.ERROR = void 0;
+	(function (exports$1) {
+		Object.defineProperty(exports$1, "__esModule", { value: true });
+		exports$1.SPECIAL_HEADERS = exports$1.HEADER_STATE = exports$1.MINOR = exports$1.MAJOR = exports$1.CONNECTION_TOKEN_CHARS = exports$1.HEADER_CHARS = exports$1.TOKEN = exports$1.STRICT_TOKEN = exports$1.HEX = exports$1.URL_CHAR = exports$1.STRICT_URL_CHAR = exports$1.USERINFO_CHARS = exports$1.MARK = exports$1.ALPHANUM = exports$1.NUM = exports$1.HEX_MAP = exports$1.NUM_MAP = exports$1.ALPHA = exports$1.FINISH = exports$1.H_METHOD_MAP = exports$1.METHOD_MAP = exports$1.METHODS_RTSP = exports$1.METHODS_ICE = exports$1.METHODS_HTTP = exports$1.METHODS = exports$1.LENIENT_FLAGS = exports$1.FLAGS = exports$1.TYPE = exports$1.ERROR = void 0;
 		const utils_1 = requireUtils$1();
 		(function (ERROR) {
 		    ERROR[ERROR["OK"] = 0] = "OK";
@@ -3578,12 +3607,12 @@ function requireConstants$3 () {
 		    ERROR[ERROR["PAUSED_UPGRADE"] = 22] = "PAUSED_UPGRADE";
 		    ERROR[ERROR["PAUSED_H2_UPGRADE"] = 23] = "PAUSED_H2_UPGRADE";
 		    ERROR[ERROR["USER"] = 24] = "USER";
-		})(exports.ERROR || (exports.ERROR = {}));
+		})(exports$1.ERROR || (exports$1.ERROR = {}));
 		(function (TYPE) {
 		    TYPE[TYPE["BOTH"] = 0] = "BOTH";
 		    TYPE[TYPE["REQUEST"] = 1] = "REQUEST";
 		    TYPE[TYPE["RESPONSE"] = 2] = "RESPONSE";
-		})(exports.TYPE || (exports.TYPE = {}));
+		})(exports$1.TYPE || (exports$1.TYPE = {}));
 		(function (FLAGS) {
 		    FLAGS[FLAGS["CONNECTION_KEEP_ALIVE"] = 1] = "CONNECTION_KEEP_ALIVE";
 		    FLAGS[FLAGS["CONNECTION_CLOSE"] = 2] = "CONNECTION_CLOSE";
@@ -3595,12 +3624,12 @@ function requireConstants$3 () {
 		    FLAGS[FLAGS["TRAILING"] = 128] = "TRAILING";
 		    // 1 << 8 is unused
 		    FLAGS[FLAGS["TRANSFER_ENCODING"] = 512] = "TRANSFER_ENCODING";
-		})(exports.FLAGS || (exports.FLAGS = {}));
+		})(exports$1.FLAGS || (exports$1.FLAGS = {}));
 		(function (LENIENT_FLAGS) {
 		    LENIENT_FLAGS[LENIENT_FLAGS["HEADERS"] = 1] = "HEADERS";
 		    LENIENT_FLAGS[LENIENT_FLAGS["CHUNKED_LENGTH"] = 2] = "CHUNKED_LENGTH";
 		    LENIENT_FLAGS[LENIENT_FLAGS["KEEP_ALIVE"] = 4] = "KEEP_ALIVE";
-		})(exports.LENIENT_FLAGS || (exports.LENIENT_FLAGS = {}));
+		})(exports$1.LENIENT_FLAGS || (exports$1.LENIENT_FLAGS = {}));
 		var METHODS;
 		(function (METHODS) {
 		    METHODS[METHODS["DELETE"] = 0] = "DELETE";
@@ -3660,8 +3689,8 @@ function requireConstants$3 () {
 		    METHODS[METHODS["RECORD"] = 44] = "RECORD";
 		    /* RAOP */
 		    METHODS[METHODS["FLUSH"] = 45] = "FLUSH";
-		})(METHODS = exports.METHODS || (exports.METHODS = {}));
-		exports.METHODS_HTTP = [
+		})(METHODS = exports$1.METHODS || (exports$1.METHODS = {}));
+		exports$1.METHODS_HTTP = [
 		    METHODS.DELETE,
 		    METHODS.GET,
 		    METHODS.HEAD,
@@ -3699,10 +3728,10 @@ function requireConstants$3 () {
 		    // TODO(indutny): should we allow it with HTTP?
 		    METHODS.SOURCE,
 		];
-		exports.METHODS_ICE = [
+		exports$1.METHODS_ICE = [
 		    METHODS.SOURCE,
 		];
-		exports.METHODS_RTSP = [
+		exports$1.METHODS_RTSP = [
 		    METHODS.OPTIONS,
 		    METHODS.DESCRIBE,
 		    METHODS.ANNOUNCE,
@@ -3719,59 +3748,59 @@ function requireConstants$3 () {
 		    METHODS.GET,
 		    METHODS.POST,
 		];
-		exports.METHOD_MAP = utils_1.enumToMap(METHODS);
-		exports.H_METHOD_MAP = {};
-		Object.keys(exports.METHOD_MAP).forEach((key) => {
+		exports$1.METHOD_MAP = utils_1.enumToMap(METHODS);
+		exports$1.H_METHOD_MAP = {};
+		Object.keys(exports$1.METHOD_MAP).forEach((key) => {
 		    if (/^H/.test(key)) {
-		        exports.H_METHOD_MAP[key] = exports.METHOD_MAP[key];
+		        exports$1.H_METHOD_MAP[key] = exports$1.METHOD_MAP[key];
 		    }
 		});
 		(function (FINISH) {
 		    FINISH[FINISH["SAFE"] = 0] = "SAFE";
 		    FINISH[FINISH["SAFE_WITH_CB"] = 1] = "SAFE_WITH_CB";
 		    FINISH[FINISH["UNSAFE"] = 2] = "UNSAFE";
-		})(exports.FINISH || (exports.FINISH = {}));
-		exports.ALPHA = [];
+		})(exports$1.FINISH || (exports$1.FINISH = {}));
+		exports$1.ALPHA = [];
 		for (let i = 'A'.charCodeAt(0); i <= 'Z'.charCodeAt(0); i++) {
 		    // Upper case
-		    exports.ALPHA.push(String.fromCharCode(i));
+		    exports$1.ALPHA.push(String.fromCharCode(i));
 		    // Lower case
-		    exports.ALPHA.push(String.fromCharCode(i + 0x20));
+		    exports$1.ALPHA.push(String.fromCharCode(i + 0x20));
 		}
-		exports.NUM_MAP = {
+		exports$1.NUM_MAP = {
 		    0: 0, 1: 1, 2: 2, 3: 3, 4: 4,
 		    5: 5, 6: 6, 7: 7, 8: 8, 9: 9,
 		};
-		exports.HEX_MAP = {
+		exports$1.HEX_MAP = {
 		    0: 0, 1: 1, 2: 2, 3: 3, 4: 4,
 		    5: 5, 6: 6, 7: 7, 8: 8, 9: 9,
 		    A: 0XA, B: 0XB, C: 0XC, D: 0XD, E: 0XE, F: 0XF,
 		    a: 0xa, b: 0xb, c: 0xc, d: 0xd, e: 0xe, f: 0xf,
 		};
-		exports.NUM = [
+		exports$1.NUM = [
 		    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
 		];
-		exports.ALPHANUM = exports.ALPHA.concat(exports.NUM);
-		exports.MARK = ['-', '_', '.', '!', '~', '*', '\'', '(', ')'];
-		exports.USERINFO_CHARS = exports.ALPHANUM
-		    .concat(exports.MARK)
+		exports$1.ALPHANUM = exports$1.ALPHA.concat(exports$1.NUM);
+		exports$1.MARK = ['-', '_', '.', '!', '~', '*', '\'', '(', ')'];
+		exports$1.USERINFO_CHARS = exports$1.ALPHANUM
+		    .concat(exports$1.MARK)
 		    .concat(['%', ';', ':', '&', '=', '+', '$', ',']);
 		// TODO(indutny): use RFC
-		exports.STRICT_URL_CHAR = [
+		exports$1.STRICT_URL_CHAR = [
 		    '!', '"', '$', '%', '&', '\'',
 		    '(', ')', '*', '+', ',', '-', '.', '/',
 		    ':', ';', '<', '=', '>',
 		    '@', '[', '\\', ']', '^', '_',
 		    '`',
 		    '{', '|', '}', '~',
-		].concat(exports.ALPHANUM);
-		exports.URL_CHAR = exports.STRICT_URL_CHAR
+		].concat(exports$1.ALPHANUM);
+		exports$1.URL_CHAR = exports$1.STRICT_URL_CHAR
 		    .concat(['\t', '\f']);
 		// All characters with 0x80 bit set to 1
 		for (let i = 0x80; i <= 0xff; i++) {
-		    exports.URL_CHAR.push(i);
+		    exports$1.URL_CHAR.push(i);
 		}
-		exports.HEX = exports.NUM.concat(['a', 'b', 'c', 'd', 'e', 'f', 'A', 'B', 'C', 'D', 'E', 'F']);
+		exports$1.HEX = exports$1.NUM.concat(['a', 'b', 'c', 'd', 'e', 'f', 'A', 'B', 'C', 'D', 'E', 'F']);
 		/* Tokens as defined by rfc 2616. Also lowercases them.
 		 *        token       = 1*<any CHAR except CTLs or separators>
 		 *     separators     = "(" | ")" | "<" | ">" | "@"
@@ -3779,27 +3808,27 @@ function requireConstants$3 () {
 		 *                    | "/" | "[" | "]" | "?" | "="
 		 *                    | "{" | "}" | SP | HT
 		 */
-		exports.STRICT_TOKEN = [
+		exports$1.STRICT_TOKEN = [
 		    '!', '#', '$', '%', '&', '\'',
 		    '*', '+', '-', '.',
 		    '^', '_', '`',
 		    '|', '~',
-		].concat(exports.ALPHANUM);
-		exports.TOKEN = exports.STRICT_TOKEN.concat([' ']);
+		].concat(exports$1.ALPHANUM);
+		exports$1.TOKEN = exports$1.STRICT_TOKEN.concat([' ']);
 		/*
 		 * Verify that a char is a valid visible (printable) US-ASCII
 		 * character or %x80-FF
 		 */
-		exports.HEADER_CHARS = ['\t'];
+		exports$1.HEADER_CHARS = ['\t'];
 		for (let i = 32; i <= 255; i++) {
 		    if (i !== 127) {
-		        exports.HEADER_CHARS.push(i);
+		        exports$1.HEADER_CHARS.push(i);
 		    }
 		}
 		// ',' = \x44
-		exports.CONNECTION_TOKEN_CHARS = exports.HEADER_CHARS.filter((c) => c !== 44);
-		exports.MAJOR = exports.NUM_MAP;
-		exports.MINOR = exports.MAJOR;
+		exports$1.CONNECTION_TOKEN_CHARS = exports$1.HEADER_CHARS.filter((c) => c !== 44);
+		exports$1.MAJOR = exports$1.NUM_MAP;
+		exports$1.MINOR = exports$1.MAJOR;
 		var HEADER_STATE;
 		(function (HEADER_STATE) {
 		    HEADER_STATE[HEADER_STATE["GENERAL"] = 0] = "GENERAL";
@@ -3811,8 +3840,8 @@ function requireConstants$3 () {
 		    HEADER_STATE[HEADER_STATE["CONNECTION_CLOSE"] = 6] = "CONNECTION_CLOSE";
 		    HEADER_STATE[HEADER_STATE["CONNECTION_UPGRADE"] = 7] = "CONNECTION_UPGRADE";
 		    HEADER_STATE[HEADER_STATE["TRANSFER_ENCODING_CHUNKED"] = 8] = "TRANSFER_ENCODING_CHUNKED";
-		})(HEADER_STATE = exports.HEADER_STATE || (exports.HEADER_STATE = {}));
-		exports.SPECIAL_HEADERS = {
+		})(HEADER_STATE = exports$1.HEADER_STATE || (exports$1.HEADER_STATE = {}));
+		exports$1.SPECIAL_HEADERS = {
 		    'connection': HEADER_STATE.CONNECTION,
 		    'content-length': HEADER_STATE.CONTENT_LENGTH,
 		    'proxy-connection': HEADER_STATE.CONNECTION,
@@ -8703,10 +8732,10 @@ function requireClientH1 () {
 	const TIMEOUT_KEEP_ALIVE = 8 | USE_NATIVE_TIMER;
 
 	class Parser {
-	  constructor (client, socket, { exports }) {
+	  constructor (client, socket, { exports: exports$1 }) {
 	    assert(Number.isFinite(client[kMaxHeadersSize]) && client[kMaxHeadersSize] > 0);
 
-	    this.llhttp = exports;
+	    this.llhttp = exports$1;
 	    this.ptr = this.llhttp.llhttp_alloc(constants.TYPE.RESPONSE);
 	    this.client = client;
 	    this.socket = socket;
@@ -24894,6 +24923,12 @@ function requireUtil$2 () {
 	 * @param {string} value
 	 */
 	function isValidClientWindowBits (value) {
+	  // Must have at least one character
+	  if (value.length === 0) {
+	    return false
+	  }
+
+	  // Check all characters are ASCII digits
 	  for (let i = 0; i < value.length; i++) {
 	    const byte = value.charCodeAt(i);
 
@@ -24902,7 +24937,9 @@ function requireUtil$2 () {
 	    }
 	  }
 
-	  return true
+	  // Check numeric range: zlib requires windowBits in range 8-15
+	  const num = Number.parseInt(value, 10);
+	  return num >= 8 && num <= 15
 	}
 
 	// https://nodejs.org/api/intl.html#detecting-internationalization-support
@@ -25432,10 +25469,14 @@ function requirePermessageDeflate () {
 
 	const { createInflateRaw, Z_DEFAULT_WINDOWBITS } = require$$1$3;
 	const { isValidClientWindowBits } = requireUtil$2();
+	const { MessageSizeExceededError } = requireErrors();
 
 	const tail = Buffer.from([0x00, 0x00, 0xff, 0xff]);
 	const kBuffer = Symbol('kBuffer');
 	const kLength = Symbol('kLength');
+
+	// Default maximum decompressed message size: 4 MB
+	const kDefaultMaxDecompressedSize = 4 * 1024 * 1024;
 
 	class PerMessageDeflate {
 	  /** @type {import('node:zlib').InflateRaw} */
@@ -25443,6 +25484,15 @@ function requirePermessageDeflate () {
 
 	  #options = {}
 
+	  /** @type {boolean} */
+	  #aborted = false
+
+	  /** @type {Function|null} */
+	  #currentCallback = null
+
+	  /**
+	   * @param {Map<string, string>} extensions
+	   */
 	  constructor (extensions) {
 	    this.#options.serverNoContextTakeover = extensions.has('server_no_context_takeover');
 	    this.#options.serverMaxWindowBits = extensions.get('server_max_window_bits');
@@ -25453,6 +25503,11 @@ function requirePermessageDeflate () {
 	    // 1.  Append 4 octets of 0x00 0x00 0xff 0xff to the tail end of the
 	    //     payload of the message.
 	    // 2.  Decompress the resulting data using DEFLATE.
+
+	    if (this.#aborted) {
+	      callback(new MessageSizeExceededError());
+	      return
+	    }
 
 	    if (!this.#inflate) {
 	      let windowBits = Z_DEFAULT_WINDOWBITS;
@@ -25466,13 +25521,37 @@ function requirePermessageDeflate () {
 	        windowBits = Number.parseInt(this.#options.serverMaxWindowBits);
 	      }
 
-	      this.#inflate = createInflateRaw({ windowBits });
+	      try {
+	        this.#inflate = createInflateRaw({ windowBits });
+	      } catch (err) {
+	        callback(err);
+	        return
+	      }
 	      this.#inflate[kBuffer] = [];
 	      this.#inflate[kLength] = 0;
 
 	      this.#inflate.on('data', (data) => {
-	        this.#inflate[kBuffer].push(data);
+	        if (this.#aborted) {
+	          return
+	        }
+
 	        this.#inflate[kLength] += data.length;
+
+	        if (this.#inflate[kLength] > kDefaultMaxDecompressedSize) {
+	          this.#aborted = true;
+	          this.#inflate.removeAllListeners();
+	          this.#inflate.destroy();
+	          this.#inflate = null;
+
+	          if (this.#currentCallback) {
+	            const cb = this.#currentCallback;
+	            this.#currentCallback = null;
+	            cb(new MessageSizeExceededError());
+	          }
+	          return
+	        }
+
+	        this.#inflate[kBuffer].push(data);
 	      });
 
 	      this.#inflate.on('error', (err) => {
@@ -25481,16 +25560,22 @@ function requirePermessageDeflate () {
 	      });
 	    }
 
+	    this.#currentCallback = callback;
 	    this.#inflate.write(chunk);
 	    if (fin) {
 	      this.#inflate.write(tail);
 	    }
 
 	    this.#inflate.flush(() => {
+	      if (this.#aborted || !this.#inflate) {
+	        return
+	      }
+
 	      const full = Buffer.concat(this.#inflate[kBuffer], this.#inflate[kLength]);
 
 	      this.#inflate[kBuffer].length = 0;
 	      this.#inflate[kLength] = 0;
+	      this.#currentCallback = null;
 
 	      callback(null, full);
 	    });
@@ -25545,6 +25630,10 @@ function requireReceiver () {
 	  /** @type {Map<string, PerMessageDeflate>} */
 	  #extensions
 
+	  /**
+	   * @param {import('./websocket').WebSocket} ws
+	   * @param {Map<string, string>|null} extensions
+	   */
 	  constructor (ws, extensions) {
 	    super();
 
@@ -25687,6 +25776,7 @@ function requireReceiver () {
 
 	        const buffer = this.consume(8);
 	        const upper = buffer.readUInt32BE(0);
+	        const lower = buffer.readUInt32BE(4);
 
 	        // 2^31 is the maximum bytes an arraybuffer can contain
 	        // on 32-bit systems. Although, on 64-bit systems, this is
@@ -25694,14 +25784,12 @@ function requireReceiver () {
 	        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Invalid_array_length
 	        // https://source.chromium.org/chromium/chromium/src/+/main:v8/src/common/globals.h;drc=1946212ac0100668f14eb9e2843bdd846e510a1e;bpv=1;bpt=1;l=1275
 	        // https://source.chromium.org/chromium/chromium/src/+/main:v8/src/objects/js-array-buffer.h;l=34;drc=1946212ac0100668f14eb9e2843bdd846e510a1e
-	        if (upper > 2 ** 31 - 1) {
+	        if (upper !== 0 || lower > 2 ** 31 - 1) {
 	          failWebsocketConnection(this.ws, 'Received payload length > 2^31 bytes.');
 	          return
 	        }
 
-	        const lower = buffer.readUInt32BE(4);
-
-	        this.#info.payloadLength = (upper << 8) + lower;
+	        this.#info.payloadLength = lower;
 	        this.#state = parserStates.READ_DATA;
 	      } else if (this.#state === parserStates.READ_DATA) {
 	        if (this.#byteOffset < this.#info.payloadLength) {
@@ -25731,7 +25819,7 @@ function requireReceiver () {
 	          } else {
 	            this.#extensions.get('permessage-deflate').decompress(body, this.#info.fin, (error, data) => {
 	              if (error) {
-	                closeWebSocketConnection(this.ws, 1007, error.message, error.message.length);
+	                failWebsocketConnection(this.ws, error.message);
 	                return
 	              }
 
@@ -26483,7 +26571,7 @@ function requireWebsocket () {
 	   * @see https://websockets.spec.whatwg.org/#feedback-from-the-protocol
 	   */
 	  #onConnectionEstablished (response, parsedExtensions) {
-	    // processResponse is called when the "response’s header list has been received and initialized."
+	    // processResponse is called when the "response's header list has been received and initialized."
 	    // once this happens, the connection is open
 	    this[kResponse] = response;
 
@@ -28166,9 +28254,9 @@ var hasRequiredException;
 function requireException () {
 	if (hasRequiredException) return exception.exports;
 	hasRequiredException = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		var errorProps = ['description', 'fileName', 'lineNumber', 'endLineNumber', 'message', 'name', 'number', 'stack'];
 
 		function Exception(message, node) {
@@ -28227,8 +28315,8 @@ function requireException () {
 
 		Exception.prototype = new Error();
 
-		exports['default'] = Exception;
-		module.exports = exports['default'];
+		exports$1['default'] = Exception;
+		module.exports = exports$1['default'];
 		
 	} (exception, exception.exports));
 	return exception.exports;
@@ -28243,13 +28331,13 @@ var hasRequiredBlockHelperMissing;
 function requireBlockHelperMissing () {
 	if (hasRequiredBlockHelperMissing) return blockHelperMissing.exports;
 	hasRequiredBlockHelperMissing = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 
 		var _utils = requireUtils();
 
-		exports['default'] = function (instance) {
+		exports$1['default'] = function (instance) {
 		  instance.registerHelper('blockHelperMissing', function (context, options) {
 		    var inverse = options.inverse,
 		        fn = options.fn;
@@ -28280,7 +28368,7 @@ function requireBlockHelperMissing () {
 		  });
 		};
 
-		module.exports = exports['default'];
+		module.exports = exports$1['default'];
 		
 	} (blockHelperMissing, blockHelperMissing.exports));
 	return blockHelperMissing.exports;
@@ -28293,9 +28381,9 @@ var hasRequiredEach;
 function requireEach () {
 	if (hasRequiredEach) return each.exports;
 	hasRequiredEach = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		// istanbul ignore next
 
 		function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -28306,7 +28394,7 @@ function requireEach () {
 
 		var _exception2 = _interopRequireDefault(_exception);
 
-		exports['default'] = function (instance) {
+		exports$1['default'] = function (instance) {
 		  instance.registerHelper('each', function (context, options) {
 		    if (!options) {
 		      throw new _exception2['default']('Must pass iterator to #each');
@@ -28395,7 +28483,7 @@ function requireEach () {
 		  });
 		};
 
-		module.exports = exports['default'];
+		module.exports = exports$1['default'];
 		
 	} (each, each.exports));
 	return each.exports;
@@ -28408,9 +28496,9 @@ var hasRequiredHelperMissing;
 function requireHelperMissing () {
 	if (hasRequiredHelperMissing) return helperMissing.exports;
 	hasRequiredHelperMissing = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		// istanbul ignore next
 
 		function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -28419,7 +28507,7 @@ function requireHelperMissing () {
 
 		var _exception2 = _interopRequireDefault(_exception);
 
-		exports['default'] = function (instance) {
+		exports$1['default'] = function (instance) {
 		  instance.registerHelper('helperMissing', function () /* [args, ]options */{
 		    if (arguments.length === 1) {
 		      // A missing field in a {{foo}} construct.
@@ -28431,7 +28519,7 @@ function requireHelperMissing () {
 		  });
 		};
 
-		module.exports = exports['default'];
+		module.exports = exports$1['default'];
 		
 	} (helperMissing, helperMissing.exports));
 	return helperMissing.exports;
@@ -28444,9 +28532,9 @@ var hasRequired_if;
 function require_if () {
 	if (hasRequired_if) return _if.exports;
 	hasRequired_if = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		// istanbul ignore next
 
 		function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -28457,7 +28545,7 @@ function require_if () {
 
 		var _exception2 = _interopRequireDefault(_exception);
 
-		exports['default'] = function (instance) {
+		exports$1['default'] = function (instance) {
 		  instance.registerHelper('if', function (conditional, options) {
 		    if (arguments.length != 2) {
 		      throw new _exception2['default']('#if requires exactly one argument');
@@ -28488,7 +28576,7 @@ function require_if () {
 		  });
 		};
 
-		module.exports = exports['default'];
+		module.exports = exports$1['default'];
 		
 	} (_if, _if.exports));
 	return _if.exports;
@@ -28501,11 +28589,11 @@ var hasRequiredLog;
 function requireLog () {
 	if (hasRequiredLog) return log.exports;
 	hasRequiredLog = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 
-		exports['default'] = function (instance) {
+		exports$1['default'] = function (instance) {
 		  instance.registerHelper('log', function () /* message, options */{
 		    var args = [undefined],
 		        options = arguments[arguments.length - 1];
@@ -28525,7 +28613,7 @@ function requireLog () {
 		  });
 		};
 
-		module.exports = exports['default'];
+		module.exports = exports$1['default'];
 		
 	} (log, log.exports));
 	return log.exports;
@@ -28538,11 +28626,11 @@ var hasRequiredLookup;
 function requireLookup () {
 	if (hasRequiredLookup) return lookup.exports;
 	hasRequiredLookup = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 
-		exports['default'] = function (instance) {
+		exports$1['default'] = function (instance) {
 		  instance.registerHelper('lookup', function (obj, field, options) {
 		    if (!obj) {
 		      // Note for 5.0: Change to "obj == null" in 5.0
@@ -28552,7 +28640,7 @@ function requireLookup () {
 		  });
 		};
 
-		module.exports = exports['default'];
+		module.exports = exports$1['default'];
 		
 	} (lookup, lookup.exports));
 	return lookup.exports;
@@ -28565,9 +28653,9 @@ var hasRequired_with;
 function require_with () {
 	if (hasRequired_with) return _with.exports;
 	hasRequired_with = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		// istanbul ignore next
 
 		function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -28578,7 +28666,7 @@ function require_with () {
 
 		var _exception2 = _interopRequireDefault(_exception);
 
-		exports['default'] = function (instance) {
+		exports$1['default'] = function (instance) {
 		  instance.registerHelper('with', function (context, options) {
 		    if (arguments.length != 2) {
 		      throw new _exception2['default']('#with requires exactly one argument');
@@ -28606,7 +28694,7 @@ function require_with () {
 		  });
 		};
 
-		module.exports = exports['default'];
+		module.exports = exports$1['default'];
 		
 	} (_with, _with.exports));
 	return _with.exports;
@@ -28684,13 +28772,13 @@ var hasRequiredInline;
 function requireInline () {
 	if (hasRequiredInline) return inline.exports;
 	hasRequiredInline = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 
 		var _utils = requireUtils();
 
-		exports['default'] = function (instance) {
+		exports$1['default'] = function (instance) {
 		  instance.registerDecorator('inline', function (fn, props, container, options) {
 		    var ret = fn;
 		    if (!props.partials) {
@@ -28711,7 +28799,7 @@ function requireInline () {
 		  });
 		};
 
-		module.exports = exports['default'];
+		module.exports = exports$1['default'];
 		
 	} (inline, inline.exports));
 	return inline.exports;
@@ -28747,9 +28835,9 @@ var hasRequiredLogger;
 function requireLogger () {
 	if (hasRequiredLogger) return logger.exports;
 	hasRequiredLogger = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 
 		var _utils = requireUtils();
 
@@ -28791,8 +28879,8 @@ function requireLogger () {
 		  }
 		};
 
-		exports['default'] = logger;
-		module.exports = exports['default'];
+		exports$1['default'] = logger;
+		module.exports = exports$1['default'];
 		
 	} (logger, logger.exports));
 	return logger.exports;
@@ -29041,9 +29129,9 @@ var hasRequiredSafeString;
 function requireSafeString () {
 	if (hasRequiredSafeString) return safeString.exports;
 	hasRequiredSafeString = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		function SafeString(string) {
 		  this.string = string;
 		}
@@ -29052,8 +29140,8 @@ function requireSafeString () {
 		  return '' + this.string;
 		};
 
-		exports['default'] = SafeString;
-		module.exports = exports['default'];
+		exports$1['default'] = SafeString;
+		module.exports = exports$1['default'];
 		
 	} (safeString, safeString.exports));
 	return safeString.exports;
@@ -29477,11 +29565,11 @@ var hasRequiredNoConflict;
 function requireNoConflict () {
 	if (hasRequiredNoConflict) return noConflict.exports;
 	hasRequiredNoConflict = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 
-		exports['default'] = function (Handlebars) {
+		exports$1['default'] = function (Handlebars) {
 		  /* istanbul ignore next */
 		  // https://mathiasbynens.be/notes/globalthis
 		  (function () {
@@ -29504,7 +29592,7 @@ function requireNoConflict () {
 		  };
 		};
 
-		module.exports = exports['default'];
+		module.exports = exports$1['default'];
 		
 	} (noConflict, noConflict.exports));
 	return noConflict.exports;
@@ -29515,9 +29603,9 @@ var hasRequiredHandlebars_runtime;
 function requireHandlebars_runtime () {
 	if (hasRequiredHandlebars_runtime) return handlebars_runtime.exports;
 	hasRequiredHandlebars_runtime = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		// istanbul ignore next
 
 		function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -29578,8 +29666,8 @@ function requireHandlebars_runtime () {
 
 		inst['default'] = inst;
 
-		exports['default'] = inst;
-		module.exports = exports['default'];
+		exports$1['default'] = inst;
+		module.exports = exports$1['default'];
 		
 	} (handlebars_runtime, handlebars_runtime.exports));
 	return handlebars_runtime.exports;
@@ -29592,9 +29680,9 @@ var hasRequiredAst;
 function requireAst () {
 	if (hasRequiredAst) return ast.exports;
 	hasRequiredAst = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		var AST = {
 		  // Public API used to evaluate derived attributes regarding AST nodes
 		  helpers: {
@@ -29620,8 +29708,8 @@ function requireAst () {
 
 		// Must be exported as an object rather than the root of the module as the jison lexer
 		// must modify the object to operate properly.
-		exports['default'] = AST;
-		module.exports = exports['default'];
+		exports$1['default'] = AST;
+		module.exports = exports$1['default'];
 		
 	} (ast, ast.exports));
 	return ast.exports;
@@ -29636,9 +29724,9 @@ var hasRequiredParser$1;
 function requireParser$1 () {
 	if (hasRequiredParser$1) return parser$1.exports;
 	hasRequiredParser$1 = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		var handlebars = (function () {
 		    var parser = { trace: function trace() {},
 		        yy: {},
@@ -30304,8 +30392,8 @@ function requireParser$1 () {
 		        this.yy = {};
 		    }Parser.prototype = parser;parser.Parser = Parser;
 		    return new Parser();
-		})();exports["default"] = handlebars;
-		module.exports = exports["default"];
+		})();exports$1["default"] = handlebars;
+		module.exports = exports$1["default"];
 		
 	} (parser$1, parser$1.exports));
 	return parser$1.exports;
@@ -30320,9 +30408,9 @@ var hasRequiredVisitor;
 function requireVisitor () {
 	if (hasRequiredVisitor) return visitor.exports;
 	hasRequiredVisitor = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		// istanbul ignore next
 
 		function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -30457,8 +30545,8 @@ function requireVisitor () {
 		  this.acceptKey(partial, 'hash');
 		}
 
-		exports['default'] = Visitor;
-		module.exports = exports['default'];
+		exports$1['default'] = Visitor;
+		module.exports = exports$1['default'];
 		
 	} (visitor, visitor.exports));
 	return visitor.exports;
@@ -30469,9 +30557,9 @@ var hasRequiredWhitespaceControl;
 function requireWhitespaceControl () {
 	if (hasRequiredWhitespaceControl) return whitespaceControl.exports;
 	hasRequiredWhitespaceControl = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		// istanbul ignore next
 
 		function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -30687,8 +30775,8 @@ function requireWhitespaceControl () {
 		  return current.leftStripped;
 		}
 
-		exports['default'] = WhitespaceControl;
-		module.exports = exports['default'];
+		exports$1['default'] = WhitespaceControl;
+		module.exports = exports$1['default'];
 		
 	} (whitespaceControl, whitespaceControl.exports));
 	return whitespaceControl.exports;
@@ -31816,7 +31904,7 @@ var hasRequiredUtil;
 function requireUtil () {
 	if (hasRequiredUtil) return util;
 	hasRequiredUtil = 1;
-	(function (exports) {
+	(function (exports$1) {
 		/*
 		 * Copyright 2011 Mozilla Foundation and contributors
 		 * Licensed under the New BSD license. See LICENSE or:
@@ -31842,7 +31930,7 @@ function requireUtil () {
 		    throw new Error('"' + aName + '" is a required argument.');
 		  }
 		}
-		exports.getArg = getArg;
+		exports$1.getArg = getArg;
 
 		var urlRegexp = /^(?:([\w+\-.]+):)?\/\/(?:(\w+:\w+)@)?([\w.-]*)(?::(\d+))?(.*)$/;
 		var dataUrlRegexp = /^data:.+\,.+$/;
@@ -31860,7 +31948,7 @@ function requireUtil () {
 		    path: match[5]
 		  };
 		}
-		exports.urlParse = urlParse;
+		exports$1.urlParse = urlParse;
 
 		function urlGenerate(aParsedUrl) {
 		  var url = '';
@@ -31882,7 +31970,7 @@ function requireUtil () {
 		  }
 		  return url;
 		}
-		exports.urlGenerate = urlGenerate;
+		exports$1.urlGenerate = urlGenerate;
 
 		/**
 		 * Normalizes a path, or the path portion of a URL:
@@ -31904,7 +31992,7 @@ function requireUtil () {
 		    }
 		    path = url.path;
 		  }
-		  var isAbsolute = exports.isAbsolute(path);
+		  var isAbsolute = exports$1.isAbsolute(path);
 
 		  var parts = path.split(/\/+/);
 		  for (var part, up = 0, i = parts.length - 1; i >= 0; i--) {
@@ -31938,7 +32026,7 @@ function requireUtil () {
 		  }
 		  return path;
 		}
-		exports.normalize = normalize;
+		exports$1.normalize = normalize;
 
 		/**
 		 * Joins two paths/URLs.
@@ -31997,9 +32085,9 @@ function requireUtil () {
 		  }
 		  return joined;
 		}
-		exports.join = join;
+		exports$1.join = join;
 
-		exports.isAbsolute = function (aPath) {
+		exports$1.isAbsolute = function (aPath) {
 		  return aPath.charAt(0) === '/' || urlRegexp.test(aPath);
 		};
 
@@ -32041,7 +32129,7 @@ function requireUtil () {
 		  // Make sure we add a "../" for each component we removed from the root.
 		  return Array(level + 1).join("../") + aPath.substr(aRoot.length + 1);
 		}
-		exports.relative = relative;
+		exports$1.relative = relative;
 
 		var supportsNullProto = (function () {
 		  var obj = Object.create(null);
@@ -32068,7 +32156,7 @@ function requireUtil () {
 
 		  return aStr;
 		}
-		exports.toSetString = supportsNullProto ? identity : toSetString;
+		exports$1.toSetString = supportsNullProto ? identity : toSetString;
 
 		function fromSetString(aStr) {
 		  if (isProtoString(aStr)) {
@@ -32077,7 +32165,7 @@ function requireUtil () {
 
 		  return aStr;
 		}
-		exports.fromSetString = supportsNullProto ? identity : fromSetString;
+		exports$1.fromSetString = supportsNullProto ? identity : fromSetString;
 
 		function isProtoString(s) {
 		  if (!s) {
@@ -32147,7 +32235,7 @@ function requireUtil () {
 
 		  return strcmp(mappingA.name, mappingB.name);
 		}
-		exports.compareByOriginalPositions = compareByOriginalPositions;
+		exports$1.compareByOriginalPositions = compareByOriginalPositions;
 
 		/**
 		 * Comparator between two mappings with deflated source and name indices where
@@ -32186,7 +32274,7 @@ function requireUtil () {
 
 		  return strcmp(mappingA.name, mappingB.name);
 		}
-		exports.compareByGeneratedPositionsDeflated = compareByGeneratedPositionsDeflated;
+		exports$1.compareByGeneratedPositionsDeflated = compareByGeneratedPositionsDeflated;
 
 		function strcmp(aStr1, aStr2) {
 		  if (aStr1 === aStr2) {
@@ -32240,7 +32328,7 @@ function requireUtil () {
 
 		  return strcmp(mappingA.name, mappingB.name);
 		}
-		exports.compareByGeneratedPositionsInflated = compareByGeneratedPositionsInflated;
+		exports$1.compareByGeneratedPositionsInflated = compareByGeneratedPositionsInflated;
 
 		/**
 		 * Strip any JSON XSSI avoidance prefix from the string (as documented
@@ -32250,7 +32338,7 @@ function requireUtil () {
 		function parseSourceMapInput(str) {
 		  return JSON.parse(str.replace(/^\)]}'[^\n]*\n/, ''));
 		}
-		exports.parseSourceMapInput = parseSourceMapInput;
+		exports$1.parseSourceMapInput = parseSourceMapInput;
 
 		/**
 		 * Compute the URL of a source given the the source root, the source's
@@ -32303,7 +32391,7 @@ function requireUtil () {
 
 		  return normalize(sourceURL);
 		}
-		exports.computeSourceURL = computeSourceURL; 
+		exports$1.computeSourceURL = computeSourceURL; 
 	} (util));
 	return util;
 }
@@ -32975,15 +33063,15 @@ var hasRequiredBinarySearch;
 function requireBinarySearch () {
 	if (hasRequiredBinarySearch) return binarySearch;
 	hasRequiredBinarySearch = 1;
-	(function (exports) {
+	(function (exports$1) {
 		/*
 		 * Copyright 2011 Mozilla Foundation and contributors
 		 * Licensed under the New BSD license. See LICENSE or:
 		 * http://opensource.org/licenses/BSD-3-Clause
 		 */
 
-		exports.GREATEST_LOWER_BOUND = 1;
-		exports.LEAST_UPPER_BOUND = 2;
+		exports$1.GREATEST_LOWER_BOUND = 1;
+		exports$1.LEAST_UPPER_BOUND = 2;
 
 		/**
 		 * Recursive implementation of binary search.
@@ -33023,7 +33111,7 @@ function requireBinarySearch () {
 
 		    // The exact needle element was not found in this haystack. Determine if
 		    // we are in termination case (3) or (2) and return the appropriate thing.
-		    if (aBias == exports.LEAST_UPPER_BOUND) {
+		    if (aBias == exports$1.LEAST_UPPER_BOUND) {
 		      return aHigh < aHaystack.length ? aHigh : -1;
 		    } else {
 		      return mid;
@@ -33037,7 +33125,7 @@ function requireBinarySearch () {
 		    }
 
 		    // we are in termination case (3) or (2) and return the appropriate thing.
-		    if (aBias == exports.LEAST_UPPER_BOUND) {
+		    if (aBias == exports$1.LEAST_UPPER_BOUND) {
 		      return mid;
 		    } else {
 		      return aLow < 0 ? -1 : aLow;
@@ -33063,13 +33151,13 @@ function requireBinarySearch () {
 		 *     searching for, respectively, if the exact element cannot be found.
 		 *     Defaults to 'binarySearch.GREATEST_LOWER_BOUND'.
 		 */
-		exports.search = function search(aNeedle, aHaystack, aCompare, aBias) {
+		exports$1.search = function search(aNeedle, aHaystack, aCompare, aBias) {
 		  if (aHaystack.length === 0) {
 		    return -1;
 		  }
 
 		  var index = recursiveSearch(-1, aHaystack.length, aNeedle, aHaystack,
-		                              aCompare, aBias || exports.GREATEST_LOWER_BOUND);
+		                              aCompare, aBias || exports$1.GREATEST_LOWER_BOUND);
 		  if (index < 0) {
 		    return -1;
 		  }
@@ -34817,9 +34905,9 @@ var hasRequiredCodeGen;
 function requireCodeGen () {
 	if (hasRequiredCodeGen) return codeGen.exports;
 	hasRequiredCodeGen = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 
 		var _utils = requireUtils();
 
@@ -34981,8 +35069,8 @@ function requireCodeGen () {
 		  }
 		};
 
-		exports['default'] = CodeGen;
-		module.exports = exports['default'];
+		exports$1['default'] = CodeGen;
+		module.exports = exports$1['default'];
 		
 	} (codeGen, codeGen.exports));
 	return codeGen.exports;
@@ -34993,9 +35081,9 @@ var hasRequiredJavascriptCompiler;
 function requireJavascriptCompiler () {
 	if (hasRequiredJavascriptCompiler) return javascriptCompiler.exports;
 	hasRequiredJavascriptCompiler = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		// istanbul ignore next
 
 		function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -36148,8 +36236,8 @@ function requireJavascriptCompiler () {
 		  }
 		}
 
-		exports['default'] = JavaScriptCompiler;
-		module.exports = exports['default'];
+		exports$1['default'] = JavaScriptCompiler;
+		module.exports = exports$1['default'];
 		
 	} (javascriptCompiler, javascriptCompiler.exports));
 	return javascriptCompiler.exports;
@@ -36160,9 +36248,9 @@ var hasRequiredHandlebars;
 function requireHandlebars () {
 	if (hasRequiredHandlebars) return handlebars.exports;
 	hasRequiredHandlebars = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 
-		exports.__esModule = true;
+		exports$1.__esModule = true;
 		// istanbul ignore next
 
 		function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { 'default': obj }; }
@@ -36223,8 +36311,8 @@ function requireHandlebars () {
 
 		inst['default'] = inst;
 
-		exports['default'] = inst;
-		module.exports = exports['default'];
+		exports$1['default'] = inst;
+		module.exports = exports$1['default'];
 		
 	} (handlebars, handlebars.exports));
 	return handlebars.exports;
@@ -48476,7 +48564,7 @@ var hasRequiredMimeTypes;
 function requireMimeTypes () {
 	if (hasRequiredMimeTypes) return mimeTypes;
 	hasRequiredMimeTypes = 1;
-	(function (exports) {
+	(function (exports$1) {
 
 		/**
 		 * Module dependencies.
@@ -48499,16 +48587,16 @@ function requireMimeTypes () {
 		 * @public
 		 */
 
-		exports.charset = charset;
-		exports.charsets = { lookup: charset };
-		exports.contentType = contentType;
-		exports.extension = extension;
-		exports.extensions = Object.create(null);
-		exports.lookup = lookup;
-		exports.types = Object.create(null);
+		exports$1.charset = charset;
+		exports$1.charsets = { lookup: charset };
+		exports$1.contentType = contentType;
+		exports$1.extension = extension;
+		exports$1.extensions = Object.create(null);
+		exports$1.lookup = lookup;
+		exports$1.types = Object.create(null);
 
 		// Populate the extensions/types maps
-		populateMaps(exports.extensions, exports.types);
+		populateMaps(exports$1.extensions, exports$1.types);
 
 		/**
 		 * Get the default charset for a MIME type.
@@ -48552,7 +48640,7 @@ function requireMimeTypes () {
 		  }
 
 		  var mime = str.indexOf('/') === -1
-		    ? exports.lookup(str)
+		    ? exports$1.lookup(str)
 		    : str;
 
 		  if (!mime) {
@@ -48561,7 +48649,7 @@ function requireMimeTypes () {
 
 		  // TODO: use content-type or other module
 		  if (mime.indexOf('charset') === -1) {
-		    var charset = exports.charset(mime);
+		    var charset = exports$1.charset(mime);
 		    if (charset) mime += '; charset=' + charset.toLowerCase();
 		  }
 
@@ -48584,7 +48672,7 @@ function requireMimeTypes () {
 		  var match = EXTRACT_TYPE_REGEXP.exec(type);
 
 		  // get extensions
-		  var exts = match && exports.extensions[match[1].toLowerCase()];
+		  var exts = match && exports$1.extensions[match[1].toLowerCase()];
 
 		  if (!exts || !exts.length) {
 		    return false
@@ -48614,7 +48702,7 @@ function requireMimeTypes () {
 		    return false
 		  }
 
-		  return exports.types[extension] || false
+		  return exports$1.types[extension] || false
 		}
 
 		/**
@@ -50106,7 +50194,7 @@ function requireGetIntrinsic () {
 					if (!allowMissing) {
 						throw new $TypeError('base intrinsic for ' + name + ' exists, but the property is not available.');
 					}
-					return void 0;
+					return void undefined$1;
 				}
 				if ($gOPD && (i + 1) >= parts.length) {
 					var desc = $gOPD(value, part);
@@ -52554,17 +52642,17 @@ var hasRequiredBrowser;
 function requireBrowser () {
 	if (hasRequiredBrowser) return browser.exports;
 	hasRequiredBrowser = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 		/**
 		 * This is the web browser implementation of `debug()`.
 		 */
 
-		exports.formatArgs = formatArgs;
-		exports.save = save;
-		exports.load = load;
-		exports.useColors = useColors;
-		exports.storage = localstorage();
-		exports.destroy = (() => {
+		exports$1.formatArgs = formatArgs;
+		exports$1.save = save;
+		exports$1.load = load;
+		exports$1.useColors = useColors;
+		exports$1.storage = localstorage();
+		exports$1.destroy = (() => {
 			let warned = false;
 
 			return () => {
@@ -52579,7 +52667,7 @@ function requireBrowser () {
 		 * Colors.
 		 */
 
-		exports.colors = [
+		exports$1.colors = [
 			'#0000CC',
 			'#0000FF',
 			'#0033CC',
@@ -52744,7 +52832,7 @@ function requireBrowser () {
 		 *
 		 * @api public
 		 */
-		exports.log = console.debug || console.log || (() => {});
+		exports$1.log = console.debug || console.log || (() => {});
 
 		/**
 		 * Save `namespaces`.
@@ -52755,9 +52843,9 @@ function requireBrowser () {
 		function save(namespaces) {
 			try {
 				if (namespaces) {
-					exports.storage.setItem('debug', namespaces);
+					exports$1.storage.setItem('debug', namespaces);
 				} else {
-					exports.storage.removeItem('debug');
+					exports$1.storage.removeItem('debug');
 				}
 			} catch (error) {
 				// Swallow
@@ -52774,7 +52862,7 @@ function requireBrowser () {
 		function load() {
 			let r;
 			try {
-				r = exports.storage.getItem('debug');
+				r = exports$1.storage.getItem('debug');
 			} catch (error) {
 				// Swallow
 				// XXX (@Qix-) should we be logging these?
@@ -52810,7 +52898,7 @@ function requireBrowser () {
 			}
 		}
 
-		module.exports = requireCommon()(exports);
+		module.exports = requireCommon()(exports$1);
 
 		const {formatters} = module.exports;
 
@@ -52999,7 +53087,7 @@ var hasRequiredNode;
 function requireNode () {
 	if (hasRequiredNode) return node.exports;
 	hasRequiredNode = 1;
-	(function (module, exports) {
+	(function (module, exports$1) {
 		const tty = require$$1$7;
 		const util = require$$1;
 
@@ -53007,13 +53095,13 @@ function requireNode () {
 		 * This is the Node.js implementation of `debug()`.
 		 */
 
-		exports.init = init;
-		exports.log = log;
-		exports.formatArgs = formatArgs;
-		exports.save = save;
-		exports.load = load;
-		exports.useColors = useColors;
-		exports.destroy = util.deprecate(
+		exports$1.init = init;
+		exports$1.log = log;
+		exports$1.formatArgs = formatArgs;
+		exports$1.save = save;
+		exports$1.load = load;
+		exports$1.useColors = useColors;
+		exports$1.destroy = util.deprecate(
 			() => {},
 			'Instance method `debug.destroy()` is deprecated and no longer does anything. It will be removed in the next major version of `debug`.'
 		);
@@ -53022,7 +53110,7 @@ function requireNode () {
 		 * Colors.
 		 */
 
-		exports.colors = [6, 2, 3, 4, 5, 1];
+		exports$1.colors = [6, 2, 3, 4, 5, 1];
 
 		try {
 			// Optional dependency (as in, doesn't need to be installed, NOT like optionalDependencies in package.json)
@@ -53030,7 +53118,7 @@ function requireNode () {
 			const supportsColor = requireSupportsColor();
 
 			if (supportsColor && (supportsColor.stderr || supportsColor).level >= 2) {
-				exports.colors = [
+				exports$1.colors = [
 					20,
 					21,
 					26,
@@ -53119,7 +53207,7 @@ function requireNode () {
 		 *   $ DEBUG_COLORS=no DEBUG_DEPTH=10 DEBUG_SHOW_HIDDEN=enabled node script.js
 		 */
 
-		exports.inspectOpts = Object.keys(process.env).filter(key => {
+		exports$1.inspectOpts = Object.keys(process.env).filter(key => {
 			return /^debug_/i.test(key);
 		}).reduce((obj, key) => {
 			// Camel-case
@@ -53151,8 +53239,8 @@ function requireNode () {
 		 */
 
 		function useColors() {
-			return 'colors' in exports.inspectOpts ?
-				Boolean(exports.inspectOpts.colors) :
+			return 'colors' in exports$1.inspectOpts ?
+				Boolean(exports$1.inspectOpts.colors) :
 				tty.isatty(process.stderr.fd);
 		}
 
@@ -53178,7 +53266,7 @@ function requireNode () {
 		}
 
 		function getDate() {
-			if (exports.inspectOpts.hideDate) {
+			if (exports$1.inspectOpts.hideDate) {
 				return '';
 			}
 			return new Date().toISOString() + ' ';
@@ -53189,7 +53277,7 @@ function requireNode () {
 		 */
 
 		function log(...args) {
-			return process.stderr.write(util.formatWithOptions(exports.inspectOpts, ...args) + '\n');
+			return process.stderr.write(util.formatWithOptions(exports$1.inspectOpts, ...args) + '\n');
 		}
 
 		/**
@@ -53229,13 +53317,13 @@ function requireNode () {
 		function init(debug) {
 			debug.inspectOpts = {};
 
-			const keys = Object.keys(exports.inspectOpts);
+			const keys = Object.keys(exports$1.inspectOpts);
 			for (let i = 0; i < keys.length; i++) {
-				debug.inspectOpts[keys[i]] = exports.inspectOpts[keys[i]];
+				debug.inspectOpts[keys[i]] = exports$1.inspectOpts[keys[i]];
 			}
 		}
 
-		module.exports = requireCommon()(exports);
+		module.exports = requireCommon()(exports$1);
 
 		const {formatters} = module.exports;
 
@@ -53809,7 +53897,7 @@ function requireFollowRedirects () {
 	// Wraps the key/value object of protocols with redirect functionality
 	function wrap(protocols) {
 	  // Default settings
-	  var exports = {
+	  var exports$1 = {
 	    maxRedirects: 21,
 	    maxBodyLength: 10 * 1024 * 1024,
 	  };
@@ -53819,7 +53907,7 @@ function requireFollowRedirects () {
 	  Object.keys(protocols).forEach(function (scheme) {
 	    var protocol = scheme + ":";
 	    var nativeProtocol = nativeProtocols[protocol] = protocols[scheme];
-	    var wrappedProtocol = exports[scheme] = Object.create(nativeProtocol);
+	    var wrappedProtocol = exports$1[scheme] = Object.create(nativeProtocol);
 
 	    // Executes a request, following redirects
 	    function request(input, options, callback) {
@@ -53842,8 +53930,8 @@ function requireFollowRedirects () {
 
 	      // Set defaults
 	      options = Object.assign({
-	        maxRedirects: exports.maxRedirects,
-	        maxBodyLength: exports.maxBodyLength,
+	        maxRedirects: exports$1.maxRedirects,
+	        maxBodyLength: exports$1.maxBodyLength,
 	      }, input, options);
 	      options.nativeProtocols = nativeProtocols;
 	      if (!isString(options.host) && !isString(options.hostname)) {
@@ -53868,7 +53956,7 @@ function requireFollowRedirects () {
 	      get: { value: get, configurable: true, enumerable: true, writable: true },
 	    });
 	  });
-	  return exports;
+	  return exports$1;
 	}
 
 	function noop() { /* empty */ }
@@ -58211,7 +58299,7 @@ var hasRequiredScripts;
 function requireScripts () {
 	if (hasRequiredScripts) return Scripts;
 	hasRequiredScripts = 1;
-	(function (exports) {
+	(function (exports$1) {
 
 		var headers, lua, templates;
 		lua = require$$0;
@@ -58225,7 +58313,7 @@ function requireScripts () {
 		  get_time: lua["get_time.lua"]
 		};
 
-		exports.allKeys = function (id) {
+		exports$1.allKeys = function (id) {
 		  return [
 		  /*
 		  HASH
@@ -58270,103 +58358,103 @@ function requireScripts () {
 
 		templates = {
 		  init: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["process_tick"],
 		    refresh_expiration: true,
 		    code: lua["init.lua"]
 		  },
 		  group_check: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: [],
 		    refresh_expiration: false,
 		    code: lua["group_check.lua"]
 		  },
 		  register_client: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys"],
 		    refresh_expiration: false,
 		    code: lua["register_client.lua"]
 		  },
 		  blacklist_client: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client"],
 		    refresh_expiration: false,
 		    code: lua["blacklist_client.lua"]
 		  },
 		  heartbeat: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick"],
 		    refresh_expiration: false,
 		    code: lua["heartbeat.lua"]
 		  },
 		  update_settings: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick"],
 		    refresh_expiration: true,
 		    code: lua["update_settings.lua"]
 		  },
 		  running: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick"],
 		    refresh_expiration: false,
 		    code: lua["running.lua"]
 		  },
 		  queued: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client"],
 		    refresh_expiration: false,
 		    code: lua["queued.lua"]
 		  },
 		  done: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick"],
 		    refresh_expiration: false,
 		    code: lua["done.lua"]
 		  },
 		  check: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick", "conditions_check"],
 		    refresh_expiration: false,
 		    code: lua["check.lua"]
 		  },
 		  submit: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick", "conditions_check"],
 		    refresh_expiration: true,
 		    code: lua["submit.lua"]
 		  },
 		  register: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick", "conditions_check"],
 		    refresh_expiration: true,
 		    code: lua["register.lua"]
 		  },
 		  free: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick"],
 		    refresh_expiration: true,
 		    code: lua["free.lua"]
 		  },
 		  current_reservoir: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick"],
 		    refresh_expiration: false,
 		    code: lua["current_reservoir.lua"]
 		  },
 		  increment_reservoir: {
-		    keys: exports.allKeys,
+		    keys: exports$1.allKeys,
 		    headers: ["validate_keys", "validate_client", "process_tick"],
 		    refresh_expiration: true,
 		    code: lua["increment_reservoir.lua"]
 		  }
 		};
-		exports.names = Object.keys(templates);
+		exports$1.names = Object.keys(templates);
 
-		exports.keys = function (name, id) {
+		exports$1.keys = function (name, id) {
 		  return templates[name].keys(id);
 		};
 
-		exports.payload = function (name) {
+		exports$1.payload = function (name) {
 		  var template;
 		  template = templates[name];
 		  return Array.prototype.concat(headers.refs, template.headers.map(function (h) {

@@ -1,3 +1,4 @@
+import axios from "axios";
 import * as core from "@actions/core";
 import { CommandType, IActionCommand, RunnerAction, ScriptData } from "./types.js";
 import { processCommands } from "./handleCommands.js";
@@ -213,19 +214,17 @@ async function run() {
             `Polling error: ${error} (consecutive errors: ${consecutiveErrorCount}/${MAX_CONSECUTIVE_ERRORS})`,
           );
 
-          const detailedError = error as any;
-
-          if (detailedError.code) {
-            core.warning(`Error code: ${detailedError.code}`);
+          if (axios.isAxiosError<{ error?: string }>(error) && error.code) {
+            core.warning(`Error code: ${error.code}`);
           }
 
           if (error instanceof Error && error.stack) {
             core.warning(`Stack trace: ${error.stack}`);
           }
 
-          if (detailedError.response && detailedError.response.status === 401) {
+          if (axios.isAxiosError<{ error?: string }>(error) && error.response?.status === 401) {
             core.setFailed(
-              `Error: ${detailedError.response.data.error}. Verify that authToken is valid. Exiting...`,
+              `Error: ${error.response.data?.error ?? "Unauthorized"}. Verify that authToken is valid. Exiting...`,
             );
             process.exit(1);
           }

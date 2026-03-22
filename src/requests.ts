@@ -13,10 +13,11 @@ const rawServerUrl = core.getInput("tuskUrl", { required: true }).replace(/\/$/,
 // Query parameters are used to pass information to the server, e.g. runType
 const parsedUrl = new URL(rawServerUrl);
 const serverUrl = `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.pathname}`;
-// TODO: add better type support (confirm that runType is present instead of any)
-const serverQueryParams: {
-  runType: string;
-} = Object.fromEntries(parsedUrl.searchParams) as any;
+const runType = parsedUrl.searchParams.get("runType");
+if (!runType) {
+  throw new Error("Input tuskUrl must include a runType query parameter.");
+}
+const serverQueryParams = { runType };
 
 const authToken = core.getInput("authToken", { required: true });
 const timeoutMs = 10_000;
