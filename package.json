@@ -33,7 +33,7 @@
     "@actions/core": "^3.0.0",
     "axios": "^1.13.5",
     "bottleneck": "^2.19.5",
-    "handlebars": "^4.7.8"
+    "handlebars": "^4.7.9"
   },
   "overrides": {
     "glob@10": "^10.5.0",
