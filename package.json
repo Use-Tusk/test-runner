@@ -31,7 +31,7 @@
   "license": "MIT",
   "dependencies": {
     "@actions/core": "^3.0.0",
-    "axios": "^1.13.5",
+    "axios": "^1.15.0",
     "bottleneck": "^2.19.5",
     "handlebars": "^4.7.8"
   },
